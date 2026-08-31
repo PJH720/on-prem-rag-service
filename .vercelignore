@@ -1,0 +1,10 @@
+# Vercel Ignore
+plans/
+bin/
+.git/
+.github/
+.serena/
+.omc/
+*.log
+*.parquet
+*.csv
