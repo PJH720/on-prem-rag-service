@@ -1,0 +1,35 @@
+# OS Files
+.DS_Store
+Thumbs.db
+
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build / Output
+.next/
+out/
+dist/
+build/
+
+# Environment Variables
+.env
+.env*.local
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Tooling / IDE
+.vscode/
+.idea/
+.omc/
+*.log

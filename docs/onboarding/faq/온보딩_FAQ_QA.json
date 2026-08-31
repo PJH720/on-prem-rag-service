@@ -1,0 +1,86 @@
+[
+  {
+    "id": "policy-001",
+    "category": "근무",
+    "question": "유연근무는 가능한가요?",
+    "answer": "가능합니다. 핵심근무시간 10시부터 16시 사에 1일 8시간을 채우면 됩니다. 근태시간은 사내 앱 'BlueMate'에 신청합니다.",
+    "doc_ref": "02_근무수칙.md"
+  },
+  {
+    "id": "policy-002",
+    "category": "근무",
+    "question": "초근 신청은 어디에 하나요?",
+    "answer": "사내 포털 people.newbluem.tech > 근태 > 초근 신청 메뉴에서 팀장 승인 하에 신청합니다. 30분 단위로 기재합니다.",
+    "doc_ref": "02_근무수칙.md"
+  },
+  {
+    "id": "policy-003",
+    "category": "복리",
+    "question": "식권은 얼마인가요?",
+    "answer": "월 15만포가 사내 카페에서 사용 가능한 충전식으로 지급됩니다.",
+    "doc_ref": "02_근무수칙.md"
+  },
+  {
+    "id": "policy-004",
+    "category": "복리",
+    "question": "서밋/헬스 복지는?",
+    "answer": "연 35만포 자율 사용 복로, 사내 카페, 영화, 헬스 등 분야 제한 없습니다. 반기 1회 증빙 서류를 제출해야 합니다.",
+    "doc_ref": "02_근무수칙.md"
+  },
+  {
+    "id": "policy-005",
+    "category": "보안",
+    "question": "개인 노트북에서 개발해도 되나요?",
+    "answer": "불가능합니다. 사내 발급 장갑만 가능합니다. 개인 장갑에 고객사 정보가 저장되면 정보보안 사고 처리됩니다.",
+    "doc_ref": "06_FAQ_자주문는_질문.md"
+  },
+  {
+    "id": "policy-006",
+    "category": "보안",
+    "question": "개인 PC에서 LLM API를 사용해도 되나요?",
+    "answer": "사내 코드에서는 사내 LLM 게이트웨이 키(linggw.internal.newbluem.tech)만 사용 가능합다. 개인 키는 사용금지합니다.",
+    "doc_ref": "06_FAQ_자주문는_질문.md"
+  },
+  {
+    "id": "policy-007",
+    "category": "IT",
+    "question": "VPN이 연결이 안 됩니다.",
+    "answer": "1) GlobalProtect 클라이언트 종료 후 재접속, 2) 재부팅, 3) #it-help 채널에서 'troubleshoot vpn' 자가진단 봇을 실행합니다.",
+    "doc_ref": "05_사내시스템_접속절차.md"
+  },
+  {
+    "id": "policy-008",
+    "category": "IT",
+    "question": "비번암너는 어디에 보관하나요?",
+    "answer": "1Password 사내 볼트(dev-onboarding 등)에만 보관합니다. 사외 비번암너 관리는 정책으로 사용금지합니다.",
+    "doc_ref": "05_사내시스템_접속절차.md"
+  },
+  {
+    "id": "policy-009",
+    "category": "온보딩",
+    "question": "온보딩 과제는 언제까지 하나요?",
+    "answer": "1주차까지 개발환경 셋업 완료, 2주차 금요일까지 온보딩 과제 PR 머지를 목표합니다.",
+    "doc_ref": "03_입사첫날_체크리스트.md"
+  },
+  {
+    "id": "policy-010",
+    "category": "온보딩",
+    "question": "배디/멘토는 누구로 정해지나요?",
+    "answer": "배디는 사소 질문 담당 선배로 팀에서 정합니다. 멘토는 기술 그로스 담당 팀장/선배 1명입니다. BF는 피플팀 담당입니다.",
+    "doc_ref": "07_미들_30-60-90_마일스톤.md"
+  },
+  {
+    "id": "policy-011",
+    "category": "행정",
+    "question": "연차 사용은 어떻게 되나요?",
+    "answer": "사내 포털 > 근태 > 휴가신청에서 신청합니다. 1시간 단위 사용이 가능하이고, 4시간 미만은 팀장 승인 불필요입니다.",
+    "doc_ref": "06_FAQ_자주문는_질문.md"
+  },
+  {
+    "id": "policy-012",
+    "category": "행정",
+    "question": "출장 신청을 하려면? (프로젝트 현장 출장)",
+    "answer": "사내 포털에서 출장 신청/승인을 받은 후, 팀장이 배정하면 교통비/숙박비는 회사 대불 결재합니다.",
+    "doc_ref": "06_FAQ_자주문는_질문.md"
+  }
+]
