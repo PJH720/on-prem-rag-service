@@ -32,16 +32,19 @@ It strictly safeguards confidential corporate data (such as executive salary gri
 
 ---
 
-## 🎯 1-Click Demo Evaluation Matrix
+## 🎯 1-Click Demo Evaluation Matrix (6 Core Scenarios)
 
 A unified test matrix showcasing our core RAG, RBAC, and rejection capabilities on the live website ([https://on-prem-rag-service.vercel.app](https://on-prem-rag-service.vercel.app)):
 
-| # | Test Query | General Role (`all`) | HR Role (`hr`) | Eng Role (`eng`) | Key Verification Metric |
-|---|---|---|---|---|---|
-| **1** | `"When can I use my annual leave after joining?"` | ✅ **1 day earned per month worked** (Cited: HR-001) | ✅ Full Access | ✅ Full Access | **[Base Retrieval]** Exact policy metrics & `[출처: Document §Section]` citation tag |
-| **2** | `"How do I settle night meal expenses on corporate card?"` | ✅ **₩15,000 limit / 25th payout** (Cited: FIN-001) | ✅ Full Access | ✅ Full Access | **[Multi-Doc Synthesis]** Combines card rules with ERP payout schedules |
-| **3** | `"Show me the salary band table for each level"` | 🔒 **Access Blocked (No Permission)** | 🔓 **Band Displayed (A/P/S/L)** (Cited: HR-011) | 🔒 **Access Blocked (No Permission)** | ★ **[RBAC Security]** Candidate pool pre-filtered before LLM context injection |
-| **4** | `"What is today's cafeteria lunch menu?"` | ⛔ **Response Rejected (No Grounding)** | ⛔ **Response Rejected (No Grounding)** | ⛔ **Response Rejected (No Grounding)** | ★ **[Hallucination Prevention]** Strict rejection gate when query is ungrounded |
+| # | Test Query | Role (`Role`) | Key Response & Citation | Verification Category |
+|---|---|---|---|---|
+| **1** | `"When can I use my annual leave after joining?"` | General (`all`) | ✅ **1 day earned per month worked, usable immediately** [Cited: HR-001 §Leave Usage] | **[Base Retrieval]** Policy metrics & citation |
+| **2** | `"How do I settle night meal expenses on corporate card?"` | General (`all`) | ✅ **₩15,000 night meal cap, 25th monthly payout** [Cited: FIN-001 §Card Processing] | **[Multi-Doc Synthesis]** Cross-document synthesis |
+| **3** | `"Show me the salary band table for each level"` | General (`all`) | 🔒 **Access Blocked (0 chunks retrieved, ungrounded)** | ★ **[RBAC Isolation]** Candidate pool pre-filtered |
+| **4** | `"How do I run the local development database?"` | Engineering (`eng`) | ✅ **Docker Compose stack (pgvector, Redis, MinIO)** [Cited: ENG-001 §Local Stack] | **[Engineering Role]** Technical doc retrieval |
+| **5** | `"What is today's cafeteria lunch menu?"` | General (`all`) | ⛔ **Response Rejected (Grounding Gate Blocked)** | ★ **[Hallucination Prevention]** 100% rejection on OOD |
+| **6** | `"As HR, show me the level salary bands and fresh grad base pay"` | HR (`hr`) | 🔓 **Level bands (A/P/S/L) & ₩48M fresh grad base** [Cited: HR-011 §2026 Salary Table] | ★ **[Authorized HR Access]** Confidential doc retrieval |
+
 
 ---
 

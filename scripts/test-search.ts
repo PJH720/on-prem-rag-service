@@ -102,6 +102,17 @@ async function runRetrieverTests() {
     `Grounded: ${gate7.grounded} (Reason: ${gate7.reason})`
   );
 
+  // Test 8: 1-Click Scenario 6 - "인사팀 권한으로 각 직급별 연봉 밴드와 신입 초봉 기준을 알려주세요" (role=hr)
+  const q8 = '인사팀 권한으로 각 직급별 연봉 밴드와 신입 초봉 기준을 알려주세요';
+  const docs8Hr = await hrRetriever.invoke(q8);
+  const gate8Hr = evaluateGrounding(docs8Hr);
+  assertTest(
+    'Test 8: 1-Click Scenario 6 - 직급별 연봉 밴드 열람 (role=hr)',
+    docs8Hr.length > 0 && readMeta(docs8Hr[0]).doc_id === 'HR-011' && gate8Hr.grounded,
+    `Top 1: ${readMeta(docs8Hr[0])?.doc_title} (§${readMeta(docs8Hr[0])?.section_title}) | Score: ${readMeta(docs8Hr[0])?.score.toFixed(2)}`
+  );
+
+
   console.log(`=== Summary: ${passCount} / ${totalCount} Calibration Tests Passed ===`);
   if (passCount === totalCount) {
     console.log('🎉 ALL LANGCHAIN RBAC & RETRIEVER TESTS PASSED PERFECTLY (100%)!');

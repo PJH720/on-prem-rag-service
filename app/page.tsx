@@ -65,11 +65,11 @@ const EXAMPLE_QUERIES = [
     desc: '다중 문서 검색 (야근식대 15,000원, 회식비 5만원, 25일 지급)',
   },
   {
-    title: '3. 연봉 테이블 조회 (RBAC)',
+    title: '3. 연봉 테이블 조회 (RBAC 차단)',
     query: '직급별 연봉 테이블 알려주세요',
     role: 'all' as Role,
-    badge: '★ RBAC 비교 데모',
-    desc: '전사(all)에서는 차단 🔒 ↔ 인사팀(hr) 전환 시 열람 🔓',
+    badge: '★ RBAC 차단 🔒',
+    desc: '전사(all) 권한에서는 대외비 문서 접근 차단 (0건 유출)',
   },
   {
     title: '4. 개발 환경 로컬 스택',
@@ -82,10 +82,18 @@ const EXAMPLE_QUERIES = [
     title: '5. 미등록 질문 (환각 방지)',
     query: '오늘 점심 메뉴 뭐야?',
     role: 'all' as Role,
-    badge: '★ 환각 방지 거부',
-    desc: '사내 문서에 없는 내용 질의 시 100% 답변 거부 ⛔',
+    badge: '★ 환각 방지 거부 ⛔',
+    desc: '사내 문서에 없는 내용 질의 시 100% 답변 거부',
+  },
+  {
+    title: '6. 직급별 연봉 밴드 열람 (HR)',
+    query: '인사팀 권한으로 각 직급별 연봉 밴드와 신입 초봉 기준을 알려주세요',
+    role: 'hr' as Role,
+    badge: '★ HR 전용 열람 🔓',
+    desc: 'HR 권한으로 대외비 문서(HR-011) 정상 인용 및 상세 연봉 밴드 답변',
   },
 ];
+
 
 const ROLES: { id: Role; label: string; icon: React.ReactNode; desc: string }[] = [
   {
