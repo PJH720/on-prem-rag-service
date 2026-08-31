@@ -98,8 +98,27 @@
    - 모델: `BAAI/bge-m3` (다국어/한국어 고성능 임베딩 모델) 또는 `jhgan/ko-sroberta-multitask`
    - 서빙 엔진: `TEI (Text Embeddings Inference)` 또는 `FastAPI + ONNX Runtime`
 2. **벡터 DB (Vector DB)**:
-   - **Qdrant** 또는 **PostgreSQL 16 + pgvector** 채택.
-   - HNSW 인덱싱 + 메타데이터 필터링(`access_role IN ('all', user_role)`)을 적용하여 벡터 거리 계산 전에 보안 필터링 강제.
+   - 솔루션: `Qdrant` 또는 `pgvector` (PostgreSQL 16)
+   - 색인 구조: HNSW (Hierarchical Navigable Small World) + Cosine Distance
+   - RBAC 메타데이터 인덱싱: `access_role` 필터 인덱스 구축
+
+3. **LangChain.js 하이브리드 검색 (`EnsembleRetriever`) 결합 설계**:
+   - 현재 구현된 `RbacBm25Retriever (BaseRetriever)`와 밀집 벡터 검색 리트리버를 결합하여 Reciprocal Rank Fusion(RRF) 기반 앙상블 리트리버로 손쉽게 확장됩니다:
+   ```ts
+   // 향후 임베딩 컨테이너(bge-m3, TEI) 연동 시의 하이브리드 확장 구성 청사진
+   const dense = new QdrantVectorStore(embeddings, { url, collectionName: 'nexatech' })
+     .asRetriever({
+       k: 4,
+       // RBAC 불변식: 벡터 검색 단계에서도 access_role 메타데이터 사전 필터 강제
+       filter: { must: [{ key: 'access_role', match: { any: ['all', role] } }] },
+     });
+
+   const hybrid = new EnsembleRetriever({
+     retrievers: [new RbacBm25Retriever({ role, k: 4 }), dense],
+     weights: [0.4, 0.6], // BM25(0.4) + Dense Vector(0.6) RRF 가중 결합
+   });
+   ```
+   - **핵심 아키텍처 불변식**: 어휘 검색(`RbacBm25Retriever`)의 생성자 선필터와 밀집 검색(`QdrantVectorStore`)의 메타데이터 필터 모두 **유사도 점수 계산 이전에 RBAC 격리를 보장**하므로 비인가 데이터가 LLM 프롬프트에 절대 유입되지 않습니다.
 
 ---
 

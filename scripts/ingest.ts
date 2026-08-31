@@ -2,10 +2,38 @@ import fs from 'fs';
 import path from 'path';
 import matter from 'gray-matter';
 import { tokenize } from '../lib/tokenizer';
-import { BM25Index, Chunk, DocFrontmatter } from '../lib/types';
+import { AccessRole } from '../lib/rbac';
 
 const CORPUS_DIR = path.join(process.cwd(), 'data', 'corpus');
 const OUTPUT_PATH = path.join(process.cwd(), 'data', 'index.json');
+
+export interface DocMetadata {
+  doc_id: string;
+  doc_title: string;
+  section_title: string;
+  category: string;
+  access_role: AccessRole;
+  owner: string;
+  file_name: string;
+}
+
+export interface RawFrontmatter {
+  title?: string;
+  doc_title?: string;
+  doc_id?: string;
+  category?: string;
+  access_role?: AccessRole;
+  owner?: string;
+  updated_at?: string;
+}
+
+export interface IndexedDocument {
+  id: string;
+  pageContent: string;
+  metadata: DocMetadata;
+  terms: Record<string, number>;
+  length: number;
+}
 
 function main() {
   console.log(`[Ingest] Reading corpus from: ${CORPUS_DIR}`);
@@ -18,7 +46,7 @@ function main() {
   const files = fs.readdirSync(CORPUS_DIR).filter(f => f.endsWith('.md')).sort();
   console.log(`[Ingest] Found ${files.length} markdown files`);
 
-  const chunks: Chunk[] = [];
+  const documents: IndexedDocument[] = [];
   const df: Record<string, number> = {};
 
   let chunkIndex = 0;
@@ -28,8 +56,9 @@ function main() {
     const rawContent = fs.readFileSync(filePath, 'utf-8');
     const { data, content } = matter(rawContent);
 
-    const frontmatter = data as Partial<DocFrontmatter>;
-    if (!frontmatter.doc_id || !frontmatter.access_role || !frontmatter.title) {
+    const frontmatter = data as RawFrontmatter;
+    const title = frontmatter.title || frontmatter.doc_title;
+    if (!frontmatter.doc_id || !frontmatter.access_role || !title) {
       console.warn(`[Warning] Skipping ${fileName}: Missing required frontmatter`);
       continue;
     }
@@ -46,7 +75,7 @@ function main() {
       if (!sectionBody) continue;
 
       sectionCount++;
-      const fullText = `${frontmatter.title} ${sectionTitle}\n${sectionBody}`;
+      const fullText = `${title} ${sectionTitle}\n${sectionBody}`;
       const tokens = tokenize(fullText);
 
       const terms: Record<string, number> = {};
@@ -54,92 +83,94 @@ function main() {
         terms[t] = (terms[t] || 0) + 1;
       }
 
-      const chunk: Chunk = {
+      const doc: IndexedDocument = {
         id: `chunk_${String(++chunkIndex).padStart(3, '0')}`,
-        doc_id: frontmatter.doc_id,
-        doc_title: frontmatter.title,
-        file_name: fileName,
-        category: frontmatter.category || '기타',
-        access_role: frontmatter.access_role,
-        owner: frontmatter.owner || '사내',
-        section_title: sectionTitle,
-        content: sectionBody,
+        pageContent: sectionBody,
+        metadata: {
+          doc_id: frontmatter.doc_id,
+          doc_title: title,
+          section_title: sectionTitle,
+          category: frontmatter.category || '기타',
+          access_role: frontmatter.access_role,
+          owner: frontmatter.owner || '사내',
+          file_name: fileName,
+        },
         terms,
         length: tokens.length,
       };
 
-      chunks.push(chunk);
+      documents.push(doc);
 
-      // Update DF (Document Frequency in term count across chunks)
       const uniqueTerms = new Set(tokens);
       for (const t of uniqueTerms) {
         df[t] = (df[t] || 0) + 1;
       }
     }
 
-    // If no ## headings found, use the entire document as a chunk
+    // Fallback if no ## headings
     if (sectionCount === 0 && content.trim().length > 0) {
-      const fullText = `${frontmatter.title}\n${content.trim()}`;
+      const fullText = `${title}\n${content.trim()}`;
       const tokens = tokenize(fullText);
       const terms: Record<string, number> = {};
       for (const t of tokens) {
         terms[t] = (terms[t] || 0) + 1;
       }
 
-      const chunk: Chunk = {
+      const doc: IndexedDocument = {
         id: `chunk_${String(++chunkIndex).padStart(3, '0')}`,
-        doc_id: frontmatter.doc_id,
-        doc_title: frontmatter.title,
-        file_name: fileName,
-        category: frontmatter.category || '기타',
-        access_role: frontmatter.access_role,
-        owner: frontmatter.owner || '사내',
-        section_title: frontmatter.title,
-        content: content.trim(),
+        pageContent: content.trim(),
+        metadata: {
+          doc_id: frontmatter.doc_id,
+          doc_title: title,
+          section_title: title,
+          category: frontmatter.category || '기타',
+          access_role: frontmatter.access_role,
+          owner: frontmatter.owner || '사내',
+          file_name: fileName,
+        },
         terms,
         length: tokens.length,
       };
 
-      chunks.push(chunk);
+      documents.push(doc);
       for (const t of new Set(tokens)) {
         df[t] = (df[t] || 0) + 1;
       }
     }
   }
 
-  const N = chunks.length;
+  const N = documents.length;
   if (N === 0) {
-    console.error('[Error] No chunks generated!');
+    console.error('[Error] No documents generated!');
     process.exit(1);
   }
 
-  const totalLength = chunks.reduce((sum, c) => sum + c.length, 0);
+  const totalLength = documents.reduce((sum, c) => sum + c.length, 0);
   const avgdl = totalLength / N;
 
-  // Calculate IDF for each term: ln((N - df + 0.5) / (df + 0.5) + 1)
   const idf: Record<string, number> = {};
   for (const [term, freq] of Object.entries(df)) {
     idf[term] = Math.log((N - freq + 0.5) / (freq + 0.5) + 1);
   }
 
-  const indexData: BM25Index = {
-    version: '1.0.0',
+  const indexData = {
+    version: '2.0.0',
     updated_at: new Date().toISOString(),
     total_docs: N,
     avgdl,
     df,
     idf,
-    chunks,
+    documents,
   };
 
   fs.writeFileSync(OUTPUT_PATH, JSON.stringify(indexData, null, 2), 'utf-8');
 
-  console.log(`\n=== [Ingest Complete] ===`);
+  console.log(`\n=== [Ingest Complete: LangChain Document Index] ===`);
   console.log(`- Total Files Processed: ${files.length}`);
-  console.log(`- Total Chunks Created : ${N}`);
-  console.log(`- Vocabulary Size (Terms): ${Object.keys(df).length}`);
-  console.log(`- Avg Chunk Token Length: ${avgdl.toFixed(1)} tokens`);
-  console.log(`- Saved Index to: ${OUTPUT_PATH} (${(fs.statSync(OUTPUT_PATH).size / 1024).toFixed(1)} KB)`);
+  console.log(`- Total Documents Created: ${N}`);
+  console.log(`- Vocabulary Size: ${Object.keys(df).length}`);
+  console.log(`- Avg Token Length: ${avgdl.toFixed(1)} tokens`);
+  console.log(`- Saved Index to: ${OUTPUT_PATH}`);
 }
 
 main();

@@ -1,128 +1,52 @@
-import { ChatMessage } from './types';
+import { ChatOpenAI } from '@langchain/openai';
 
-export interface LLMStreamOptions {
-  messages: ChatMessage[];
-  byokKey?: string;
-  onToken?: (token: string) => void;
+export type Provider = 'on-premise' | 'byok';
+
+export interface GetModelOptions {
+  isLocal: boolean;
+  /** BYOK 모드에서만 사용. 절대 서버에 저장하거나 로깅하지 않는다. */
+  apiKey?: string;
+  customBaseUrl?: string;
 }
-
-export interface LLMConfig {
-  provider: 'on-premise' | 'byok';
-  baseURL: string;
-  model: string;
-  apiKey: string;
-}
-
-export function getLLMConfig(byokKey?: string): LLMConfig {
-  if (byokKey && byokKey.trim().length > 0) {
-    return {
-      provider: 'byok',
-      baseURL: process.env.BYOK_BASE_URL || 'https://api.openai.com/v1',
-      model: process.env.BYOK_MODEL || 'gpt-4o-mini',
-      apiKey: byokKey.trim(),
-    };
-  }
-
-  return {
-    provider: 'on-premise',
-    baseURL: process.env.LLM_BASE_URL || 'http://spark-node.internal:8000/v1',
-    model: process.env.LLM_MODEL || 'Inferact/Qwen3.8-Flash-Next-NVFP4',
-    apiKey: process.env.LLM_API_KEY || 'not-needed',
-  };
-}
-
 
 /**
- * Calls OpenAI-compatible streaming completion endpoint.
- * Handles both on-premise (sglang with enable_thinking: false) and OpenAI BYOK.
+ * 검증된 온프레미스 필수 파라미터.
+ * 누락하면 Qwen3가 reasoning 토큰만 태우고 content를 빈 문자열로 반환한다.
  */
-export async function createLLMStream(
-  messages: ChatMessage[],
-  byokKey?: string
-): Promise<ReadableStream<Uint8Array>> {
-  const config = getLLMConfig(byokKey);
+const ONPREM_MODEL_KWARGS = { chat_template_kwargs: { enable_thinking: false } };
 
-  const bodyPayload: Record<string, unknown> = {
-    model: config.model,
-    messages,
-    stream: true,
-    max_tokens: 1024,
+export function resolveProvider(byokKey?: string): Provider {
+  return byokKey && byokKey.trim().length > 0 ? 'byok' : 'on-premise';
+}
+
+export function getModel({ isLocal, apiKey, customBaseUrl }: GetModelOptions): ChatOpenAI {
+  if (isLocal) {
+    return new ChatOpenAI({
+      model: process.env.LLM_MODEL || 'Inferact/Qwen3.8-Flash-Next-NVFP4',
+      // sglang은 인증이 없지만 OpenAI SDK가 비어 있지 않은 키를 요구한다.
+      apiKey: process.env.LLM_API_KEY || 'not-needed',
+      temperature: 0.2,
+      maxTokens: 1024,
+      streaming: true,
+      // sglang은 stream_options를 지원하지 않을 수 있다. 켜두면 400으로 죽는다.
+      streamUsage: false,
+      configuration: {
+        baseURL: customBaseUrl || process.env.LLM_BASE_URL || 'http://spark-node.internal:8000/v1',
+      },
+      modelKwargs: ONPREM_MODEL_KWARGS,
+    });
+  }
+
+  if (!apiKey) throw new Error('BYOK mode requires a user-supplied API key');
+
+  return new ChatOpenAI({
+    model: process.env.BYOK_MODEL || 'gpt-4o-mini',
+    apiKey,
     temperature: 0.2,
-  };
-
-  // Crucial on-premise requirement: disable thinking mode for low latency and pure text output
-  if (config.provider === 'on-premise') {
-    bodyPayload.chat_template_kwargs = { enable_thinking: false };
-  }
-
-  const response = await fetch(`${config.baseURL}/chat/completions`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${config.apiKey}`,
-    },
-    body: JSON.stringify(bodyPayload),
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`LLM Error (${response.status}): ${errorText}`);
-  }
-
-  if (!response.body) {
-    throw new Error('No response body from LLM');
-  }
-
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  const encoder = new TextEncoder();
-
-  let buffer = '';
-
-  return new ReadableStream({
-    async pull(controller) {
-      try {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) {
-            controller.close();
-            break;
-          }
-
-          buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split('\n');
-          buffer = lines.pop() || '';
-
-          for (const line of lines) {
-            const trimmed = line.trim();
-            if (!trimmed || trimmed.startsWith(':')) continue;
-            if (trimmed === 'data: [DONE]') {
-              controller.close();
-              return;
-            }
-
-            if (trimmed.startsWith('data: ')) {
-              const jsonStr = trimmed.slice(6);
-              try {
-                const parsed = JSON.parse(jsonStr);
-                const delta = parsed.choices?.[0]?.delta;
-                // Only yield content; discard reasoning_content if any
-                const text = delta?.content;
-                if (text) {
-                  controller.enqueue(encoder.encode(text));
-                }
-              } catch {
-                // Ignore parse errors on partial chunks
-              }
-            }
-          }
-        }
-      } catch (err) {
-        controller.error(err);
-      }
-    },
-    cancel() {
-      reader.cancel();
+    maxTokens: 1024,
+    streaming: true,
+    configuration: {
+      baseURL: customBaseUrl || process.env.BYOK_BASE_URL || 'https://api.openai.com/v1',
     },
   });
 }

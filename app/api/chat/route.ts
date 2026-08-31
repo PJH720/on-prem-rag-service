@@ -1,19 +1,124 @@
 import { NextRequest } from 'next/server';
-import { searchChunks, hasSufficientGrounding } from '@/lib/search';
-import { createLLMStream, getLLMConfig } from '@/lib/llm';
-import { ChatMessage, Role } from '@/lib/types';
+import { RunnableBranch, RunnableLambda, RunnableSequence } from '@langchain/core/runnables';
+import { StringOutputParser } from '@langchain/core/output_parsers';
+import { AIMessage, HumanMessage, type BaseMessage } from '@langchain/core/messages';
+import type { Document } from '@langchain/core/documents';
+import type { ChatOpenAI } from '@langchain/openai';
 
-// Vercel Serverless Function Configuration
+import { RbacBm25Retriever, evaluateGrounding, readMeta, type GroundingGate } from '@/lib/retriever';
+import { getModel, resolveProvider } from '@/lib/llm';
+import { answerPrompt, formatDocsAsXml } from '@/lib/prompt';
+import type { ViewerRole } from '@/lib/rbac';
+import type { ChatMessage } from '@/lib/types';
+
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 30;
+
+const REFUSAL_TEXT =
+  '사내 규정 및 온보딩 문서에서 관련된 근거를 찾지 못했습니다.\n\n' +
+  '해당 정보는 사내 지식 베이스에 등록되어 있지 않거나 현재 열람 권한 범위 밖입니다. ' +
+  '보다 상세한 안내는 담당 부서(피플팀 `people@nexatech.ai` 또는 IT지원팀 `it-support@nexatech.ai`)로 문의해 주시기 바랍니다.';
+
+interface ChainInput {
+  question: string;
+  role: ViewerRole;
+  docs: Document[];
+  history: BaseMessage[];
+  grounded: boolean;
+}
+
+/** 근거 부족 시 LLM을 호출하지 않고 즉시 거부로 분기한다. */
+function buildChain(model: ChatOpenAI) {
+  return RunnableBranch.from([
+    [(input: ChainInput) => !input.grounded, RunnableLambda.from(() => REFUSAL_TEXT)],
+    RunnableSequence.from([
+      RunnableLambda.from((input: ChainInput) => ({
+        role: input.role,
+        question: input.question,
+        history: input.history,
+        context: formatDocsAsXml(input.docs),
+      })),
+      answerPrompt,
+      model,
+      new StringOutputParser(),
+    ]),
+  ]);
+}
+
+function toLangChainHistory(history: ChatMessage[]): BaseMessage[] {
+  return history
+    .slice(-4)
+    .map((m) => (m.role === 'assistant' ? new AIMessage(m.content) : new HumanMessage(m.content)));
+}
+
+function toSources(docs: Document[]) {
+  return docs.map((d) => {
+    const m = readMeta(d);
+    return {
+      doc_id: m.doc_id,
+      doc_title: m.doc_title,
+      section_title: m.section_title,
+      score: m.score,
+      normalizedScore: m.normalizedScore,
+      snippet: d.pageContent.slice(0, 250) + (d.pageContent.length > 250 ? '...' : ''),
+      access_role: m.access_role,
+    };
+  });
+}
+
+function buildSearchOnlyAnswer(role: ViewerRole, docs: Document[]): string {
+  if (docs.length === 0) return REFUSAL_TEXT;
+  const top = readMeta(docs[0]);
+  const topContent = docs[0].pageContent;
+
+  return (
+    `### 🔍 사내 지식 검색 결과 (검색 전용 모드)\n\n` +
+    `**[${role.toUpperCase()} 권한]** 사내 규정 검색을 통해 관련 핵심 문서를 찾았습니다. (우측 상단 'BYOK 키 설정' 시 LLM 대화형 스트리밍으로 전환됩니다.)\n\n` +
+    `**📌 관련 핵심 규정**: [출처: ${top.doc_title} §${top.section_title}]\n\n` +
+    `${topContent}\n\n` +
+    (docs.length > 1
+      ? `\n---\n**추가 연관 섹션**: [출처: ${readMeta(docs[1]).doc_title} §${readMeta(docs[1]).section_title}]\n${docs[1].pageContent.slice(0, 180)}...\n`
+      : '')
+  );
+}
+
+/** 헤더에는 ASCII 스칼라만 넣는다 — 한국어 문서명은 헤더 값으로 들어갈 수 없다. */
+function buildHeaders(confidence: string, provider: string, gate: GroundingGate, docs: Document[]) {
+  return new Headers({
+    'Content-Type': 'text/plain; charset=utf-8',
+    'Cache-Control': 'no-cache, no-transform',
+    'X-Accel-Buffering': 'no',
+    'x-rag-confidence': confidence,
+    'x-rag-provider': provider,
+    'x-rag-top-score': gate.topScore.toFixed(2),
+    'x-rag-gate-reason': gate.reason,
+    'x-rag-doc-ids': docs.map((d) => readMeta(d).doc_id).join(','),
+  });
+}
+
+/** JSON은 반드시 한 줄. 개행이 들어가면 page.tsx의 \n\n 종결 파싱이 깨진다. */
+function metadataFrame(meta: Record<string, unknown>): string {
+  return `__METADATA__:${JSON.stringify(meta)}\n\n`;
+}
+
+function staticStream(meta: Record<string, unknown>, text: string): ReadableStream<Uint8Array> {
+  const encoder = new TextEncoder();
+  return new ReadableStream({
+    start(controller) {
+      controller.enqueue(encoder.encode(metadataFrame(meta)));
+      controller.enqueue(encoder.encode(text));
+      controller.close();
+    },
+  });
+}
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const { message, role = 'all', history = [] } = body as {
       message: string;
-      role: Role;
+      role: ViewerRole;
       history?: ChatMessage[];
     };
 
@@ -25,166 +130,92 @@ export async function POST(req: NextRequest) {
     }
 
     const byokKey = req.headers.get('x-byok-key') || undefined;
-    const llmConfig = getLLMConfig(byokKey);
+    const provider = resolveProvider(byokKey);
 
-    // 1. RBAC Pre-Filter + BM25 Search
-    const searchResults = searchChunks(message, role, 4);
-    const isGrounded = hasSufficientGrounding(searchResults, message);
+    // 1. RBAC 선필터 + BM25 검색 (체인 밖에서 1회)
+    const retriever = new RbacBm25Retriever({ role, k: 4 });
+    const docs = await retriever.invoke(message);
+    const gate = evaluateGrounding(docs);
+    const sources = toSources(docs);
 
-    const sources = searchResults.map(r => ({
-      doc_id: r.chunk.doc_id,
-      doc_title: r.chunk.doc_title,
-      section_title: r.chunk.section_title,
-      score: r.score,
-      normalizedScore: r.normalizedScore,
-      snippet: r.chunk.content.slice(0, 250) + (r.chunk.content.length > 250 ? '...' : ''),
-      access_role: r.chunk.access_role,
-    }));
-
-    const encoder = new TextEncoder();
-
-    // 2. Rejection Logic: When confidence is insufficient, reject immediately
-    if (!isGrounded || searchResults.length === 0) {
-      const rejectionMeta = JSON.stringify({
+    // 2. 신뢰도 게이트 — LLM 호출 없이 즉시 거부
+    if (!gate.grounded) {
+      const meta = {
         confidence: 'rejected',
-        provider: byokKey ? 'byok' : 'on-premise',
-        model: llmConfig.model,
+        provider,
         role,
         sources,
         rejected: true,
-      });
-
-      const rejectionText =
-        '사내 규정 및 온보딩 문서에서 관련된 근거를 찾지 못했습니다.\n\n' +
-        '해당 정보는 사내 지식 베이스에 등록되어 있지 않거나 현재 열람 권한 범위 밖입니다. ' +
-        '보다 상세한 안내는 담당 부서(피플팀 `people@nexatech.ai` 또는 IT지원팀 `it-support@nexatech.ai`)로 문의해 주시기 바랍니다.';
-
-      const stream = new ReadableStream({
-        start(controller) {
-          controller.enqueue(encoder.encode(`__METADATA__:${rejectionMeta}\n\n`));
-          controller.enqueue(encoder.encode(rejectionText));
-          controller.close();
-        },
-      });
-
-      return new Response(stream, {
-        headers: {
-          'Content-Type': 'text/plain; charset=utf-8',
-          'Cache-Control': 'no-cache, no-transform',
-          'Connection': 'keep-alive',
-          'X-Accel-Buffering': 'no',
-        },
+        gate: gate.reason,
+      };
+      return new Response(staticStream(meta, REFUSAL_TEXT), {
+        headers: buildHeaders('rejected', provider, gate, docs),
       });
     }
 
-    // 3. Prepare Context for Generation
-    const topDoc = searchResults[0];
-    const contextText = searchResults
-      .map((r, i) => {
-        return `[근거 ${i + 1}] 문서: ${r.chunk.doc_title} (ID: ${r.chunk.doc_id}) § ${r.chunk.section_title}\n권한: ${r.chunk.access_role}\n내용:\n${r.chunk.content}`;
-      })
-      .join('\n\n---\n\n');
+    const model = getModel({ isLocal: provider === 'on-premise', apiKey: byokKey });
+    const chain = buildChain(model);
 
-    const systemPrompt = `당신은 넥사테크(NexaTech) 사내 온보딩 지식 챗봇입니다.
-현재 질문자의 조회 권한(Role)은 [${role}]입니다.
-반드시 아래 제공된 [사내 문서 근거]에만 기반하여 질문에 친절하고 정확하게 한국어로 답변하십시오.
+    const lcStream = await chain.stream({
+      question: message,
+      role,
+      docs,
+      history: toLangChainHistory(Array.isArray(history) ? history : []),
+      grounded: true,
+    });
 
-[필수 답변 원칙]
-1. 반드시 아래 제공된 문서의 사실만을 바탕으로 답변하십시오.
-2. 모든 문장이나 사실 진술 끝에는 반드시 \`[출처: 문서명 §섹션명]\` 형식으로 인용 태그를 명시하십시오. (예: [출처: 연차 및 휴가 규정 §연차 유급휴가 발생 기준])
-3. 제공된 문서에 없는 내용은 추측하여 지어내지 말고 모른다고 답하십시오.
-
-[사내 문서 근거]
-${contextText}`;
-
-    const llmMessages: ChatMessage[] = [
-      { role: 'system', content: systemPrompt },
-      ...(Array.isArray(history) ? history.slice(-4) : []),
-      { role: 'user', content: message },
-    ];
-
-    // Try calling LLM stream; if endpoint is unreachable (e.g. Vercel without local Tailscale), fallback to Search-Only synthesis
+    // 3. 첫 토큰을 먼저 당겨 연결 실패를 확정한다 (메타데이터 송출 전에).
+    const iterator = lcStream[Symbol.asyncIterator]();
+    let first: IteratorResult<string>;
     try {
-      const llmStream = await createLLMStream(llmMessages, byokKey);
-      const reader = llmStream.getReader();
-
-      const metadataHeader = JSON.stringify({
-        confidence: 'high',
-        provider: llmConfig.provider,
-        model: llmConfig.model,
-        role,
-        sources,
-        rejected: false,
-      });
-
-      let metaSent = false;
-
-      const transformStream = new ReadableStream({
-        async pull(controller) {
-          if (!metaSent) {
-            controller.enqueue(encoder.encode(`__METADATA__:${metadataHeader}\n\n`));
-            metaSent = true;
-          }
-
-          const { done, value } = await reader.read();
-          if (done) {
-            controller.close();
-            return;
-          }
-          controller.enqueue(value);
-        },
-        cancel() {
-          reader.cancel();
-        },
-      });
-
-      return new Response(transformStream, {
-        headers: {
-          'Content-Type': 'text/plain; charset=utf-8',
-          'Cache-Control': 'no-cache, no-transform',
-          'Connection': 'keep-alive',
-          'X-Accel-Buffering': 'no',
-        },
-      });
+      first = await iterator.next();
     } catch (llmErr) {
-      console.warn('LLM unreachable or error, falling back to Search-Only Mode:', llmErr);
-
-      // Search-Only Mode: Extractive Synthesis without requiring external API
-      const searchOnlyMeta = JSON.stringify({
+      console.warn('[chat] LLM unreachable, falling back to search-only:', llmErr);
+      const meta = {
         confidence: 'high',
         provider: 'search-only',
         model: 'BM25 Extractive Search Engine',
         role,
         sources,
         rejected: false,
-      });
-
-      const summaryText =
-        `### 🔍 사내 지식 검색 결과 (검색 전용 모드)\n\n` +
-        `**[${role.toUpperCase()} 권한]** 사내 규정 검색을 통해 관련 핵심 문서를 찾았습니다. (우측 상단 'BYOK 키 설정' 시 LLM 대화형 스트리밍으로 전환됩니다.)\n\n` +
-        `**📌 관련 핵심 규정**: [출처: ${topDoc.chunk.doc_title} §${topDoc.chunk.section_title}]\n\n` +
-        `${topDoc.chunk.content}\n\n` +
-        (searchResults.length > 1
-          ? `\n---\n**추가 연관 섹션**: [출처: ${searchResults[1].chunk.doc_title} §${searchResults[1].chunk.section_title}]\n${searchResults[1].chunk.content.slice(0, 180)}...\n`
-          : '');
-
-      const fallbackStream = new ReadableStream({
-        start(controller) {
-          controller.enqueue(encoder.encode(`__METADATA__:${searchOnlyMeta}\n\n`));
-          controller.enqueue(encoder.encode(summaryText));
-          controller.close();
-        },
-      });
-
-      return new Response(fallbackStream, {
-        headers: {
-          'Content-Type': 'text/plain; charset=utf-8',
-          'Cache-Control': 'no-cache, no-transform',
-          'Connection': 'keep-alive',
-          'X-Accel-Buffering': 'no',
-        },
+      };
+      return new Response(staticStream(meta, buildSearchOnlyAnswer(role, docs)), {
+        headers: buildHeaders('high', 'search-only', gate, docs),
       });
     }
+
+    const meta = {
+      confidence: 'high',
+      provider,
+      model: model.model,
+      role,
+      sources,
+      rejected: false,
+    };
+
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream<Uint8Array>({
+      async start(controller) {
+        controller.enqueue(encoder.encode(metadataFrame(meta)));
+        if (!first.done && first.value) controller.enqueue(encoder.encode(first.value));
+        try {
+          for (;;) {
+            const next = await iterator.next();
+            if (next.done) break;
+            if (next.value) controller.enqueue(encoder.encode(next.value));
+          }
+        } catch (err) {
+          console.error('[chat] stream interrupted:', err);
+          controller.enqueue(encoder.encode('\n\n(응답이 중단되었습니다. 다시 시도해 주세요.)'));
+        }
+        controller.close();
+      },
+      cancel() {
+        void iterator.return?.();
+      },
+    });
+
+    return new Response(stream, { headers: buildHeaders('high', provider, gate, docs) });
   } catch (error: unknown) {
     console.error('Chat API Error:', error);
     const errMessage = error instanceof Error ? error.message : 'Internal Server Error';
