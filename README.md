@@ -32,7 +32,7 @@ It strictly safeguards confidential corporate data (such as executive salary gri
 
 ---
 
-## 🎯 1-Click Demo Evaluation Matrix (6 Core Scenarios)
+## 🎯 1-Click Demo Evaluation Matrix (9 Core Scenarios)
 
 A unified test matrix showcasing our core RAG, RBAC, and rejection capabilities on the live website ([https://on-prem-rag-service.vercel.app](https://on-prem-rag-service.vercel.app)):
 
@@ -44,6 +44,9 @@ A unified test matrix showcasing our core RAG, RBAC, and rejection capabilities 
 | **4** | `"How do I run the local development database?"` | Engineering (`eng`) | ✅ **Docker Compose stack (pgvector, Redis, MinIO)** [Cited: ENG-001 §Local Stack] | **[Engineering Role]** Technical doc retrieval |
 | **5** | `"What is today's cafeteria lunch menu?"` | General (`all`) | ⛔ **Response Rejected (Grounding Gate Blocked)** | ★ **[Hallucination Prevention]** 100% rejection on OOD |
 | **6** | `"As HR, show me the level salary bands and fresh grad base pay"` | HR (`hr`) | 🔓 **Level bands (A/P/S/L) & ₩48M fresh grad base** [Cited: HR-011 §2026 Salary Table] | ★ **[Authorized HR Access]** Confidential doc retrieval |
+| **7** | `"What are the security guidelines for using ChatGPT or generative AI?"` | General (`all`) | ✅ **Tier 1~3 tools & Class 1~4 data input matrix** [Cited: AI-001 §Approved Tools] | **[AI Governance]** AI security & accountability |
+| **8** | `"Who is the head of Infrastructure DevOps and what are their duties?"` | General (`all`) | ✅ **Infra DevOps Lead Jin-ho Choi & GPU server farm care** [Cited: GEN-003 §Infra DevOps] | **[Org Directory]** 120-person hierarchy & R&R |
+| **9** | `"As HR, show me the employee evaluation rating distribution and records"` | HR (`hr`) | 🔓 **S/A/B/C Gaussian curve (10/30/50/10%) & record card** [Cited: HR-012 §Evaluation Cards] | ★ **[HR Confidential]** Performance & records access |
 
 
 ---
@@ -53,8 +56,8 @@ A unified test matrix showcasing our core RAG, RBAC, and rejection capabilities 
 Built natively on `@langchain/core` and `@langchain/openai` using declarative **LangChain Expression Language (LCEL)** pipelines.
 
 ```
- [ 8 Curated .md Corpus ] ─── Build-time Ingestion (pnpm ingest) ───▶ data/index.json (LangChain Document)
-   frontmatter: title,                                                26 chunks + BM25 term stats
+ [ 13 Curated .md Corpus ] ─── Build-time Ingestion (pnpm ingest) ───▶ data/index.json (LangChain Document)
+   frontmatter: title,                                                59 chunks + BM25 term stats
    category, access_role,                                                        │
    owner, updated_at                                                             │
                                                                                  ▼
@@ -79,7 +82,7 @@ Built natively on `@langchain/core` and `@langchain/openai` using declarative **
 
 ---
 
-## 📂 Curated Knowledge Base (8 Core Documents)
+## 📂 Curated Knowledge Base (13 Core Documents)
 
 | Doc ID | File | Role (`access_role`) | Summary |
 |---|---|---|---|
@@ -91,6 +94,11 @@ Built natively on `@langchain/core` and `@langchain/openai` using declarative **
 | `SEC-001` | [`06_정보보안_및_계정_수칙.md`](./docs/onboarding/06_정보보안_및_계정_수칙.md) | `all` | Mandatory 1Password vault, BYOD ban, 10-min screen lock, 2FA/OTP enforcement |
 | `HR-011` | [`07_연봉_테이블_및_직급_체계.md`](./docs/onboarding/07_연봉_테이블_및_직급_체계.md) | **`hr`** | ★ **[RBAC Core Demo]** Level-based base pay bands (A/P/S/L), profit-sharing incentive |
 | `ENG-001` | [`08_개발_환경_및_배포_규정.md`](./docs/onboarding/08_개발_환경_및_배포_규정.md) | **`eng`** | ★ **[RBAC Eng Demo]** Docker Compose local stack, Friday 14:00+ deployment freeze |
+| `AI-001` | [`09_사내_생성형_AI_활용_및_보안_가이드라인.md`](./docs/onboarding/09_사내_생성형_AI_활용_및_보안_가이드라인.md) | `all` | ★ **[AI Governance]** Tier 1~3 tools, Class 1~4 data matrix, copyleft contamination check |
+| `GEN-003` | [`10_전사_조직도_및_부서별_업무_R&R.md`](./docs/onboarding/10_전사_조직도_및_부서별_업무_R&R.md) | `all` | **[Org Hierarchy]** 120-person 5 divisions, Infra DevOps lead, AI Platform division & R&R |
+| `HR-012` | [`11_인사평가_등급_및_임직원_인사기록_세칙.md`](./docs/onboarding/11_인사평가_등급_및_임직원_인사기록_세칙.md) | **`hr`** | ★ **[HR Confidential]** S/A/B/C Gaussian curve, retention score index, employee record card |
+| `SEC-002` | [`12_보안_사고_대응_및_인시던트_런북.md`](./docs/onboarding/12_보안_사고_대응_및_인시던트_런북.md) | `all` | **[Incident Runbook]** S1~S4 severity SLA, on-call roles (EOC/IMOC/CMOC), 15m/30m escalation |
+| `ENG-002` | [`13_CI_CD_파이프라인_및_인프라_운영_표준.md`](./docs/onboarding/13_CI_CD_파이프라인_및_인프라_운영_표준.md) | **`eng`** | ★ **[Infra Standards]** GitHub Actions quality gate, canary release, 5-min rollback SLA |
 
 ---
 
@@ -129,12 +137,13 @@ pnpm install
 # 3. Build LangChain Document index from markdown corpus (generates data/index.json)
 pnpm ingest
 
-# 4. Run automated RBAC & BM25 retriever test suite (8 test scenarios)
+# 4. Run automated RBAC & BM25 retriever test suite (17 test scenarios)
 pnpm test:search
 
 # 5. Launch development server (http://localhost:3000)
 pnpm dev
 ```
+
 
 ---
 

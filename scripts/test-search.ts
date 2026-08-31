@@ -112,6 +112,81 @@ async function runRetrieverTests() {
     `Top 1: ${readMeta(docs8Hr[0])?.doc_title} (§${readMeta(docs8Hr[0])?.section_title}) | Score: ${readMeta(docs8Hr[0])?.score.toFixed(2)}`
   );
 
+  // Test 9: New Doc AI-001 - "사내 생성형 AI 활용 및 보안 가이드라인" (role=all)
+  const q9 = '사내에서 ChatGPT나 생성형 AI를 사용할 때 보안 가이드라인이 어떻게 되나요?';
+  const docs9 = await allRetriever.invoke(q9);
+  const gate9 = evaluateGrounding(docs9);
+  assertTest(
+    'Test 9: "생성형 AI 활용 및 보안 가이드라인" (role=all)',
+    docs9.length > 0 && readMeta(docs9[0]).doc_id === 'AI-001' && gate9.grounded,
+    `Top 1: ${readMeta(docs9[0])?.doc_title} (§${readMeta(docs9[0])?.section_title}) | Score: ${readMeta(docs9[0])?.score.toFixed(2)}`
+  );
+
+  // Test 10: New Doc GEN-003 - "인프라 DevOps실 부서장 및 R&R" (role=all)
+  const q10 = '인프라 DevOps실 담당 부서장과 주요 업무가 무엇인가요?';
+  const docs10 = await allRetriever.invoke(q10);
+  const gate10 = evaluateGrounding(docs10);
+  assertTest(
+    'Test 10: "인프라 DevOps실 부서장 및 R&R" (role=all)',
+    docs10.length > 0 && readMeta(docs10[0]).doc_id === 'GEN-003' && gate10.grounded,
+    `Top 1: ${readMeta(docs10[0])?.doc_title} (§${readMeta(docs10[0])?.section_title}) | Score: ${readMeta(docs10[0])?.score.toFixed(2)}`
+  );
+
+  // Test 11: New Doc HR-012 - RBAC Isolation for HR records under role=all
+  const q11 = '임직원 인사평가 등급 배분 비율과 인사기록 카드를 보여주세요';
+  const docs11All = await allRetriever.invoke(q11);
+  const hr12InAll = docs11All.find(d => readMeta(d).doc_id === 'HR-012');
+  assertTest(
+    'Test 11: HR 평가기록 조회 under role="all" (전사 RBAC 차단)',
+    hr12InAll === undefined,
+    `role="all" candidate pool isolated: HR-012 present = ${!!hr12InAll}`
+  );
+
+  // Test 12: New Doc HR-012 - Authorized Access under role=hr
+  const docs12Hr = await hrRetriever.invoke(q11);
+  const gate12Hr = evaluateGrounding(docs12Hr);
+  assertTest(
+    'Test 12: HR 평가기록 조회 under role="hr" (인사팀 정상 인용)',
+    docs12Hr.length > 0 && readMeta(docs12Hr[0]).doc_id === 'HR-012' && gate12Hr.grounded,
+    `Top 1: ${readMeta(docs12Hr[0])?.doc_title} (§${readMeta(docs12Hr[0])?.section_title}) | Score: ${readMeta(docs12Hr[0])?.score.toFixed(2)}`
+  );
+
+  // Test 13: New Doc SEC-002 - "장애 심각도 등급 및 온콜 에스컬레이션" (role=all)
+  const q13 = 'S1 등급 장애 발생 시 온콜 역할과 에스컬레이션 기준은 어떻게 되나요?';
+  const docs13 = await allRetriever.invoke(q13);
+  const gate13 = evaluateGrounding(docs13);
+  assertTest(
+    'Test 13: "장애 심각도 등급 및 온콜 런북" (role=all)',
+    docs13.length > 0 && readMeta(docs13[0]).doc_id === 'SEC-002' && gate13.grounded,
+    `Top 1: ${readMeta(docs13[0])?.doc_title} (§${readMeta(docs13[0])?.section_title}) | Score: ${readMeta(docs13[0])?.score.toFixed(2)}`
+  );
+
+  // Test 14: New Doc ENG-002 - "카나리 배포 및 롤백 SLA" (role=eng)
+  const engRetriever = new RbacBm25Retriever({ role: 'eng', k: 5 });
+  const q14 = '프로덕션 릴리스 시 카나리 배포 전략과 롤백 SLA 기준을 알려주세요';
+  const docs14 = await engRetriever.invoke(q14);
+  const gate14 = evaluateGrounding(docs14);
+  assertTest(
+    'Test 14: "카나리 배포 및 롤백 SLA" (role=eng)',
+    docs14.length > 0 && readMeta(docs14[0]).doc_id === 'ENG-002' && gate14.grounded,
+    `Top 1: ${readMeta(docs14[0])?.doc_title} (§${readMeta(docs14[0])?.section_title}) | Score: ${readMeta(docs14[0])?.score.toFixed(2)}`
+  );
+
+  // Test 15: Regression Guard - HR-011 still #1 for 연봉 테이블 under role=hr
+  const docs15 = await hrRetriever.invoke('직급별 연봉 테이블 알려주세요');
+  assertTest(
+    'Test 15: Regression Guard - HR-011 retains #1 rank for 연봉 테이블 under role="hr"',
+    docs15.length > 0 && readMeta(docs15[0]).doc_id === 'HR-011',
+    `Top 1: ${readMeta(docs15[0])?.doc_title} (§${readMeta(docs15[0])?.section_title})`
+  );
+
+  // Test 16: Regression Guard - ENG-001 still #1 for 로컬 개발 DB under role=eng
+  const docs16 = await engRetriever.invoke('로컬 개발 DB는 어떻게 구동하나요?');
+  assertTest(
+    'Test 16: Regression Guard - ENG-001 retains #1 rank for 로컬 개발 DB under role="eng"',
+    docs16.length > 0 && readMeta(docs16[0]).doc_id === 'ENG-001',
+    `Top 1: ${readMeta(docs16[0])?.doc_title} (§${readMeta(docs16[0])?.section_title})`
+  );
 
   console.log(`=== Summary: ${passCount} / ${totalCount} Calibration Tests Passed ===`);
   if (passCount === totalCount) {
@@ -120,3 +195,4 @@ async function runRetrieverTests() {
 }
 
 runRetrieverTests();
+

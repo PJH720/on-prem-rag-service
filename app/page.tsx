@@ -92,6 +92,27 @@ const EXAMPLE_QUERIES = [
     badge: '★ HR 전용 열람 🔓',
     desc: 'HR 권한으로 대외비 문서(HR-011) 정상 인용 및 상세 연봉 밴드 답변',
   },
+  {
+    title: '7. 사내 AI 보안 가이드라인',
+    query: '사내에서 ChatGPT나 생성형 AI를 사용할 때 보안 가이드라인이 어떻게 되나요?',
+    role: 'all' as Role,
+    badge: '★ AI 거버넌스 🤖',
+    desc: 'Tier 1~3 도구 등급 및 Class 1~4 데이터 기밀 입력 제한 규정',
+  },
+  {
+    title: '8. 인프라 DevOps실 R&R 및 리더',
+    query: '인프라 DevOps실 담당 부서장과 주요 업무가 무엇인가요?',
+    role: 'all' as Role,
+    badge: '전사 조직도 👥',
+    desc: '120명 조직 체계 및 인프라 DevOps실 리더/담당 업무 검색',
+  },
+  {
+    title: '9. 인사평가 등급 및 기록 (HR)',
+    query: '인사팀 권한으로 임직원 인사평가 등급 배분 비율과 인사기록 샘플을 보여주세요',
+    role: 'hr' as Role,
+    badge: '★ HR 평가기록 🔓',
+    desc: 'HR 권한(HR-012) 전용 S/A/B/C 정규분포 및 인사기록 카드 열람',
+  },
 ];
 
 

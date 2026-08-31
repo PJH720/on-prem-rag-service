@@ -32,9 +32,9 @@
 
 ---
 
-## 🎯 1-Click 핵심 검증 시나리오 매트릭스 (6대 시나리오)
+## 🎯 1-Click 핵심 검증 시나리오 매트릭스 (9대 시나리오)
 
-심사자가 라이브 데모 웹사이트([https://on-prem-rag-service.vercel.app](https://on-prem-rag-service.vercel.app))에서 한눈에 확인할 수 있는 6대 핵심 검증 시나리오입니다:
+심사자가 라이브 데모 웹사이트([https://on-prem-rag-service.vercel.app](https://on-prem-rag-service.vercel.app))에서 한눈에 확인할 수 있는 9대 핵심 검증 시나리오입니다:
 
 | # | 테스트 질의 | 권한 (`Role`) | 핵심 답변 및 인용 | 검증 카테고리 |
 |---|---|---|---|---|
@@ -44,6 +44,9 @@
 | **4** | `"로컬 개발 DB는 어떻게 구동하나요?"` | 개발팀 (`eng`) | ✅ **Docker Compose 스택 (pgvector, Redis, MinIO)** [출처: ENG-001 §로컬 환경] | **[개발팀 전용]** 엔지니어링 규정 추출 |
 | **5** | `"오늘 점심 메뉴 뭐야?"` | 전사 (`all`) | ⛔ **답변 거부 (환각 방지 신뢰도 게이트 차단)** | ★ **[환각 방지]** Out-of-Domain 100% 거부 |
 | **6** | `"인사팀 권한으로 각 직급별 연봉 밴드와 신입 초봉 기준을 알려주세요"` | 인사팀 (`hr`) | 🔓 **A/P/S/L 레벨별 연봉 밴드 & 신입 초봉 4,800만** [출처: HR-011 §2026 연봉 테이블] | ★ **[HR 전용 열람]** 대외비 문서 인용 열람 |
+| **7** | `"사내에서 ChatGPT나 생성형 AI를 사용할 때 보안 가이드라인이 어떻게 되나요?"` | 전사 (`all`) | ✅ **Tier 1~3 도구 등급 및 Class 1~4 데이터 입력 제한** [출처: AI-001 §승인 도구 등급] | **[AI 거버넌스]** AI 보안 및 책임 원칙 |
+| **8** | `"인프라 DevOps실 담당 부서장과 주요 업무가 무엇인가요?"` | 전사 (`all`) | ✅ **인프라 DevOps실 최진호 Lead & GPU 서버팜 유지보수** [출처: GEN-003 §인프라 및 DevOps실] | **[전사 조직도]** 120명 조직 체계 및 R&R |
+| **9** | `"인사팀 권한으로 임직원 인사평가 등급 배분 비율과 인사기록 샘플을 보여주세요"` | 인사팀 (`hr`) | 🔓 **S/A/B/C 정규분포(10/30/50/10%) 및 인사기록 카드** [출처: HR-012 §인사기록 관리] | ★ **[HR 평가기록]** 인사 대외비 평가/기록 열람 |
 
 
 ---
@@ -53,8 +56,8 @@
 본 프로젝트는 `@langchain/core`와 `@langchain/openai`를 기반으로 한 선언적 **LCEL (LangChain Expression Language)** 파이프라인으로 구축되었습니다.
 
 ```
- [ 정예 코퍼스 8종 .md ] ─── 빌드타임 인제스트 (pnpm ingest) ───▶ data/index.json (LangChain Document)
-   frontmatter: title,                                                청크 26개 + BM25 통계
+ [ 정예 코퍼스 13종 .md ] ─── 빌드타임 인제스트 (pnpm ingest) ───▶ data/index.json (LangChain Document)
+   frontmatter: title,                                                청크 59개 + BM25 통계
    category, access_role,                                                        │
    owner, updated_at                                                             │
                                                                                  ▼
@@ -79,7 +82,7 @@
 
 ---
 
-## 📂 정예 코퍼스 구성 (8종)
+## 📂 정예 코퍼스 구성 (13종)
 
 | 문서 ID | 파일명 | 권한 (`access_role`) | 주요 내용 |
 |---|---|---|---|
@@ -91,6 +94,11 @@
 | `SEC-001` | [`06_정보보안_및_계정_수칙.md`](./docs/onboarding/06_정보보안_및_계정_수칙.md) | `all` | 1Password 의무화, BYOD 저장 금지, 10분 화면 잠금, 2FA/OTP |
 | `HR-011` | [`07_연봉_테이블_및_직급_체계.md`](./docs/onboarding/07_연봉_테이블_및_직급_체계.md) | **`hr`** | ★ **[RBAC 데모 핵심]** 직급별(A/P/S/L) 기본급 밴드, 인센티브 공식 |
 | `ENG-001` | [`08_개발_환경_및_배포_규정.md`](./docs/onboarding/08_개발_환경_및_배포_규정.md) | **`eng`** | ★ **[RBAC 개발팀]** Docker Compose 로컬 스택, 금요일 14시 이후 배포 동결 |
+| `AI-001` | [`09_사내_생성형_AI_활용_및_보안_가이드라인.md`](./docs/onboarding/09_사내_생성형_AI_활용_및_보안_가이드라인.md) | `all` | ★ **[AI 거버넌스]** Tier 1~3 도구 등급, Class 1~4 데이터 입력 매트릭스, 카피레프트 오염 방지 |
+| `GEN-003` | [`10_전사_조직도_및_부서별_업무_R&R.md`](./docs/onboarding/10_전사_조직도_및_부서별_업무_R&R.md) | `all` | **[조직도]** 120명 5대 본부 인원 구성, 인프라 DevOps실, AI플랫폼본부 리더 및 R&R |
+| `HR-012` | [`11_인사평가_등급_및_임직원_인사기록_세칙.md`](./docs/onboarding/11_인사평가_등급_및_임직원_인사기록_세칙.md) | **`hr`** | ★ **[HR 대외비 평가]** S/A/B/C 정규분포 가이드라인, 리텐션 스코어, 인사기록 카드 |
+| `SEC-002` | [`12_보안_사고_대응_및_인시던트_런북.md`](./docs/onboarding/12_보안_사고_대응_및_인시던트_런북.md) | `all` | **[장애 런북]** S1~S4 심각도 및 SLA, 온콜(EOC/IMOC/CMOC), 15분/30분 에스컬레이션 |
+| `ENG-002` | [`13_CI_CD_파이프라인_및_인프라_운영_표준.md`](./docs/onboarding/13_CI_CD_파이프라인_및_인프라_운영_표준.md) | **`eng`** | ★ **[인프라 표준]** GitHub Actions 품질 게이트, 카나리 릴리스, 5분 롤백 SLA, IaC 관리 |
 
 ---
 
@@ -123,12 +131,13 @@ pnpm install
 # 3. 마크다운 코퍼스 색인 빌드 (LangChain Document 스키마 index.json 생성)
 pnpm ingest
 
-# 4. RBAC & BM25 리트리버 8대 단위/통합 테스트 검증
+# 4. RBAC & BM25 리트리버 17대 단위/통합 테스트 검증 (100% Pass)
 pnpm test:search
 
 # 5. 로컬 개발 서버 실행 (http://localhost:3000)
 pnpm dev
 ```
+
 
 ---
 
