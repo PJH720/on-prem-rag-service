@@ -156,18 +156,18 @@ export async function POST(req: NextRequest) {
     const model = getModel({ isLocal: provider === 'on-premise', apiKey: byokKey });
     const chain = buildChain(model);
 
-    const lcStream = await chain.stream({
-      question: message,
-      role,
-      docs,
-      history: toLangChainHistory(Array.isArray(history) ? history : []),
-      grounded: true,
-    });
-
     // 3. 첫 토큰을 먼저 당겨 연결 실패를 확정한다 (메타데이터 송출 전에).
-    const iterator = lcStream[Symbol.asyncIterator]();
+    let iterator: AsyncIterator<string>;
     let first: IteratorResult<string>;
     try {
+      const lcStream = await chain.stream({
+        question: message,
+        role,
+        docs,
+        history: toLangChainHistory(Array.isArray(history) ? history : []),
+        grounded: true,
+      });
+      iterator = lcStream[Symbol.asyncIterator]();
       first = await iterator.next();
     } catch (llmErr) {
       console.warn('[chat] LLM unreachable, falling back to search-only:', llmErr);
@@ -183,6 +183,7 @@ export async function POST(req: NextRequest) {
         headers: buildHeaders('high', 'search-only', gate, docs),
       });
     }
+
 
     const meta = {
       confidence: 'high',
