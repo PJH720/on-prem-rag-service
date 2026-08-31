@@ -25,11 +25,12 @@ export function getLLMConfig(byokKey?: string): LLMConfig {
 
   return {
     provider: 'on-premise',
-    baseURL: process.env.LLM_BASE_URL || 'http://spark-f5e2.tail0bfda4.ts.net:8000/v1',
+    baseURL: process.env.LLM_BASE_URL || 'http://spark-node.internal:8000/v1',
     model: process.env.LLM_MODEL || 'Inferact/Qwen3.8-Flash-Next-NVFP4',
     apiKey: process.env.LLM_API_KEY || 'not-needed',
   };
 }
+
 
 /**
  * Calls OpenAI-compatible streaming completion endpoint.

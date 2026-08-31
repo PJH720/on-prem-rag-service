@@ -20,7 +20,7 @@
 
 ### 2.1 실측 하드웨어 및 런타임 환경
 - **호스트 인프라**: NVIDIA DGX Spark GB10 서버
-- **네트워크 토폴로지**: Tailscale Zero-Trust 사설망 (`spark-f5e2.tail0bfda4.ts.net:8000`)
+- **네트워크 토폴로지**: Zero-Trust 사설망 (`spark-gpu-node.internal:8000`)
 - **추론 프레임워크**: `sglang` (High-throughput LLM serving engine with RadixAttention)
 - **배포 모델**: `Inferact/Qwen3.8-Flash-Next-NVFP4`
 - **최대 컨텍스트 길이 (Max Context)**: 262,144 tokens (262K 초장문 컨텍스트 지원)

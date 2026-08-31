@@ -81,26 +81,20 @@ export function hasSufficientGrounding(results: ScoredChunk[], query?: string): 
   if (!results || results.length === 0) return false;
   const top = results[0];
 
-  // If query is provided, check distinct word match ratio
-  if (query) {
-    const rawWords = query
-      .replace(/[^\w\s가-힣0-9]/g, ' ')
-      .split(/\s+/)
-      .filter(w => w.length >= 2);
-    
-    // Check how many of user's core query words are represented in matched terms
-    const matchedWordCount = rawWords.filter(w =>
-      top.matchedTerms.some(t => t.includes(w) || w.includes(t))
-    ).length;
+  // Base score threshold (tuned on 8-doc corpus)
+  if (top.score < 10.0) {
+    return false;
+  }
 
-    const coverage = rawWords.length > 0 ? matchedWordCount / rawWords.length : 0;
-    
-    // For single-word queries, require score >= 12; for multi-word queries, require >= 2 matched words or >= 40% coverage and score >= 12
-    if (rawWords.length >= 2 && (matchedWordCount < 2 || coverage < 0.35)) {
+  // If query is provided, check distinct term matches
+  if (query) {
+    // If only 1 bi-gram/word matched and score is moderate, reject as superficial match
+    if (top.matchedTerms.length < 2 && top.score < 18.0) {
       return false;
     }
   }
 
-  return top.score >= 12.0;
+  return true;
 }
+
 

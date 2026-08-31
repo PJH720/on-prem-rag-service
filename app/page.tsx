@@ -22,6 +22,7 @@ import {
   Users,
   Code,
   DollarSign,
+  Search,
 } from 'lucide-react';
 
 interface GroundingSource {
@@ -41,72 +42,73 @@ interface Message {
   sources?: GroundingSource[];
   confidence?: 'high' | 'rejected';
   rejected?: boolean;
-  provider?: string;
+  provider?: 'on-premise' | 'byok' | 'search-only' | string;
   model?: string;
   queryRole?: Role;
 }
 
 const EXAMPLE_QUERIES = [
   {
-    title: '연차 사용 규정',
+    title: '1. 연차 발생 및 사용 규정',
     query: '연차는 입사 후 언제부터 쓸 수 있나요?',
     role: 'all' as Role,
-    desc: '기본 온보딩 질의 (전사)',
+    badge: '전사 (General)',
+    desc: '기본 온보딩 질의 (1개월 개근 시 1일 발생, 반차/반반차)',
   },
   {
-    title: '식대 및 경비 정산',
+    title: '2. 야근 식대 및 경비 정산',
     query: '법인카드로 결제한 식대는 어떻게 정산하나요?',
     role: 'all' as Role,
-    desc: '다중 문서 종합 검색 (전사)',
+    badge: '전사 (General)',
+    desc: '다중 문서 검색 (야근식대 15,000원, 회식비 5만원, 25일 지급)',
   },
   {
-    title: '연봉 테이블 조회',
+    title: '3. 연봉 테이블 조회 (RBAC)',
     query: '직급별 연봉 테이블 알려주세요',
-    role: 'hr' as Role,
-    desc: '★ RBAC 권한 분기 데모 (인사팀 vs 전사)',
+    role: 'all' as Role,
+    badge: '★ RBAC 비교 데모',
+    desc: '전사(all)에서는 차단 🔒 ↔ 인사팀(hr) 전환 시 열람 🔓',
   },
   {
-    title: '개발 환경 셋업',
+    title: '4. 개발 환경 로컬 스택',
     query: '로컬 개발 DB는 어떻게 구동하나요?',
     role: 'eng' as Role,
-    desc: '개발팀 전용 문서 (개발팀)',
+    badge: '개발팀 (Engineering)',
+    desc: '개발팀 전용 문서 (Docker Compose pgvector, Redis, MinIO)',
   },
   {
-    title: '미등록 질문 거부',
-    query: '오늘 구내식당 점심 메뉴 뭐야?',
+    title: '5. 미등록 질문 (환각 방지)',
+    query: '오늘 점심 메뉴 뭐야?',
     role: 'all' as Role,
-    desc: '★ 근거 부족 시 환각 방지 거부 데모',
+    badge: '★ 환각 방지 거부',
+    desc: '사내 문서에 없는 내용 질의 시 100% 답변 거부 ⛔',
   },
 ];
 
-const ROLES: { id: Role; label: string; icon: React.ReactNode; desc: string; badgeColor: string }[] = [
+const ROLES: { id: Role; label: string; icon: React.ReactNode; desc: string }[] = [
   {
     id: 'all',
     label: '전사 (General)',
     icon: <Users className="w-4 h-4" />,
-    desc: '일반 사내 규정, 복리후생, 근무 지침 열람',
-    badgeColor: 'bg-slate-100 text-slate-700 border-slate-300',
+    desc: '취업규칙, 연차, 재택, 경비/법카, 복리후생, 보안',
   },
   {
     id: 'hr',
     label: '인사팀 (HR)',
     icon: <Building2 className="w-4 h-4" />,
-    desc: '★ 연봉 테이블(HR-011), 인사평가 세칙(HR-012) 열람 가능',
-    badgeColor: 'bg-purple-100 text-purple-800 border-purple-300',
+    desc: '★ 연봉 테이블(HR-011), 직급별 기본급 밴드 열람 가능',
   },
   {
     id: 'eng',
     label: '개발팀 (Engineering)',
     icon: <Code className="w-4 h-4" />,
-    desc: '개발 환경 셋업(ENG-001), 코드리뷰/배포 규정(ENG-002) 열람 가능',
-    badgeColor: 'bg-blue-100 text-blue-800 border-blue-300',
+    desc: '개발 환경 셋업(ENG-001), Docker 스택, 배포 동결',
   },
   {
     id: 'finance',
     label: '재무팀 (Finance)',
     icon: <DollarSign className="w-4 h-4" />,
-    desc: '예산 집행 승인 한도(FIN-011), 전결 규정 열람 가능',
-    badgeColor: 'bg-emerald-100 text-emerald-800 border-emerald-300',
+    desc: '경비 정산 규정, 예산 승인 한도',
   },
 ];
 
@@ -203,7 +205,7 @@ export default function ChatPage() {
 
       let buffer = '';
 
-      // Initialize assistant message placeholder
+      // Initialize assistant placeholder
       setMessages(prev => [
         ...prev,
         {
@@ -231,7 +233,6 @@ export default function ChatPage() {
               metadataParsed = true;
               buffer = buffer.slice(endMetaIndex + 2);
 
-              // Auto-open sources if high confidence
               setOpenSources(prev => ({
                 ...prev,
                 [assistantMessageId]: metaObj.confidence === 'high',
@@ -271,7 +272,7 @@ export default function ChatPage() {
         {
           id: assistantMessageId,
           role: 'assistant',
-          content: `⚠️ 오류: ${errMsg}\n\n온프레미스 GPU 서버 또는 BYOK API 설정을 확인해 주세요.`,
+          content: `⚠️ 오류: ${errMsg}`,
           confidence: 'rejected',
           rejected: true,
           queryRole: roleToSend,
@@ -297,7 +298,7 @@ export default function ChatPage() {
         return (
           <span
             key={i}
-            className="inline-flex items-center px-2 py-0.5 my-0.5 mx-1 rounded text-xs font-semibold bg-emerald-100 text-emerald-800 border border-emerald-300 shadow-sm"
+            className="inline-flex items-center px-2 py-0.5 my-0.5 mx-1 rounded text-xs font-semibold bg-emerald-100 text-emerald-800 border border-emerald-300 shadow-xs"
           >
             🔖 {part.slice(1, -1)}
           </span>
@@ -334,7 +335,7 @@ export default function ChatPage() {
         <div className="flex items-center gap-2 flex-wrap">
           {/* Provider Badge */}
           <div
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium border shadow-sm ${
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium border shadow-xs ${
               byokKey
                 ? 'bg-purple-50 text-purple-700 border-purple-200'
                 : 'bg-emerald-50 text-emerald-800 border-emerald-200'
@@ -344,14 +345,14 @@ export default function ChatPage() {
             <span>
               {byokKey
                 ? 'OpenAI BYOK (gpt-4o-mini)'
-                : '온프레미스 GPU (DGX Spark Qwen3.8-Flash)'}
+                : '온프레미스 GPU (Qwen3.8-Flash)'}
             </span>
           </div>
 
           {/* BYOK Modal Trigger */}
           <button
             onClick={() => setIsByokModalOpen(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-white text-slate-700 hover:bg-slate-100 border border-slate-300 rounded-md transition shadow-sm"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-white text-slate-700 hover:bg-slate-100 border border-slate-300 rounded-md transition shadow-xs"
           >
             <Key className="w-3.5 h-3.5 text-slate-500" />
             <span>{byokKey ? 'BYOK 키 변경' : 'BYOK 키 설정'}</span>
@@ -371,7 +372,7 @@ export default function ChatPage() {
       </header>
 
       {/* 2. Role Selector (RBAC Control) */}
-      <div className="mt-4 p-3 bg-white rounded-xl border border-slate-200 shadow-sm">
+      <div className="mt-4 p-3 bg-white rounded-xl border border-slate-200 shadow-xs">
         <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-1.5 text-xs font-bold text-slate-700">
             <Lock className="w-3.5 h-3.5 text-slate-500" />
@@ -415,25 +416,25 @@ export default function ChatPage() {
       {/* 3. Chat Messages Feed */}
       <div className="flex-1 overflow-y-auto my-4 space-y-4 pr-1">
         {messages.length === 0 ? (
-          <div className="h-full flex flex-col items-center justify-center p-6 text-center max-w-2xl mx-auto">
+          <div className="h-full flex flex-col items-center justify-center p-6 text-center max-w-3xl mx-auto">
             <div className="w-14 h-14 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center mb-4 shadow-inner">
               <Sparkles className="w-7 h-7" />
             </div>
-            <h2 className="text-lg font-bold text-slate-800 mb-2">
-              무엇이든 물어보세요!
+            <h2 className="text-lg font-bold text-slate-800 mb-1">
+              넥사테크 온보딩 지식 챗봇에 오신 것을 환영합니다!
             </h2>
             <p className="text-xs text-slate-600 mb-6 leading-relaxed">
-              넥사테크 15종 사내 규정(연차, 경비, 복지, 개발 환경, 보안 등)에 기반하여
+              사내 규정(연차, 경비, 복리후생, 개발 환경, 비밀유지, 연봉/평가 등)을 바탕으로
               정확한 출처 인용과 함께 답변합니다.
             </p>
 
             {/* Example Queries */}
-            <div className="w-full space-y-2">
-              <div className="text-xs font-semibold text-slate-500 text-left mb-1 flex items-center gap-1">
+            <div className="w-full space-y-2 text-left">
+              <div className="text-xs font-semibold text-slate-500 mb-1 flex items-center gap-1">
                 <HelpCircle className="w-3.5 h-3.5" />
-                <span>추천 테스트 질의 (클릭 시 자동 실행):</span>
+                <span>1-Click 핵심 검증 시나리오 (클릭 시 자동 실행):</span>
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-left">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {EXAMPLE_QUERIES.map((eq, idx) => (
                   <button
                     key={idx}
@@ -441,14 +442,14 @@ export default function ChatPage() {
                       setCurrentRole(eq.role);
                       handleSend(eq.query, eq.role);
                     }}
-                    className="p-3 bg-white hover:bg-slate-50 border border-slate-200 hover:border-emerald-500 rounded-lg shadow-sm transition group"
+                    className="p-3 bg-white hover:bg-slate-50 border border-slate-200 hover:border-emerald-500 rounded-lg shadow-xs transition group"
                   >
                     <div className="flex items-center justify-between mb-1">
                       <span className="font-semibold text-xs text-slate-800 group-hover:text-emerald-700">
                         {eq.title}
                       </span>
-                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200">
-                        {eq.role}
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200 font-medium">
+                        {eq.badge}
                       </span>
                     </div>
                     <div className="text-xs text-slate-600 mb-1">{eq.query}</div>
@@ -478,7 +479,7 @@ export default function ChatPage() {
 
                 {/* Message Bubble */}
                 <div
-                  className={`max-w-3xl rounded-2xl p-4 shadow-sm text-sm leading-relaxed whitespace-pre-wrap ${
+                  className={`max-w-3xl rounded-2xl p-4 shadow-xs text-sm leading-relaxed whitespace-pre-wrap ${
                     isUser
                       ? 'bg-slate-900 text-white rounded-br-none'
                       : isRejected
@@ -499,7 +500,7 @@ export default function ChatPage() {
                         {isRejected ? (
                           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 font-medium border border-amber-300">
                             <AlertCircle className="w-3.5 h-3.5" />
-                            근거 부족 (환각 방지 거부)
+                            근거 부족 (환각 방지 답변 거부)
                           </span>
                         ) : (
                           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-medium border border-emerald-300">
@@ -510,7 +511,7 @@ export default function ChatPage() {
 
                         {m.model && (
                           <span className="text-[11px] text-slate-400">
-                            모델: {m.model}
+                            {m.model}
                           </span>
                         )}
                       </div>
@@ -538,7 +539,7 @@ export default function ChatPage() {
                         {m.sources.map((src, sIdx) => (
                           <div
                             key={sIdx}
-                            className="p-3 bg-slate-50 rounded-lg border border-slate-200 text-xs space-y-1.5 shadow-xs"
+                            className="p-3 bg-slate-50 rounded-lg border border-slate-200 text-xs space-y-1.5"
                           >
                             <div className="flex items-center justify-between">
                               <div className="flex items-center gap-1.5 font-bold text-slate-800">
@@ -618,7 +619,7 @@ export default function ChatPage() {
 
         <div className="flex items-center justify-between mt-2 text-[11px] text-slate-400 px-1">
           <span>
-            💡 모든 답변은 사내 지식 베이스 검색 청크에 100% 근거하며 출처가 명시됩니다.
+            💡 검색된 사내 문서 청크에 100% 근거하여 인용이 생성되며, 근거 부족 시 환각을 차단합니다.
           </span>
           <span className="font-mono">Next.js 15 + BM25 RBAC</span>
         </div>
@@ -638,14 +639,14 @@ export default function ChatPage() {
             </div>
 
             <p className="text-xs text-slate-600 mb-4 leading-relaxed">
-              Vercel 공개 배포 환경 등 온프레미스 GPU 서버에 직접 접속할 수 없는 경우,
-              사용자의 OpenAI API 키를 입력하여 클라우드 LLM(gpt-4o-mini)으로 추론할 수 있습니다.
+              Vercel 공개 배포 등 온프레미스 GPU 서버에 직접 연결되지 않은 환경에서
+              OpenAI API 키를 입력하여 클라우드 LLM(gpt-4o-mini)으로 즉시 추론할 수 있습니다.
             </p>
 
             <div className="p-3 bg-amber-50 rounded-lg border border-amber-200 text-xs text-amber-900 mb-4 flex items-start gap-2">
               <Shield className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
               <span>
-                <strong>보안 보장:</strong> 입력하신 API 키는 브라우저의 <code>localStorage</code>에만 보관되며,
+                <strong>보안 원칙:</strong> 입력하신 API 키는 브라우저의 <code>localStorage</code>에만 보관되며,
                 서버 데이터베이스나 로그에 절대 저장되지 않고 요청 헤더로만 전달됩니다.
               </span>
             </div>
@@ -670,7 +671,7 @@ export default function ChatPage() {
                   onClick={() => handleSaveByok('')}
                   className="px-3 py-2 text-xs text-rose-600 hover:bg-rose-50 rounded-lg transition"
                 >
-                  키 삭제 (온프레미스 모드로 복귀)
+                  키 삭제 (기본 모드로 복귀)
                 </button>
               )}
               <button
