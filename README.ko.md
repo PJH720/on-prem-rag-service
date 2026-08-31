@@ -21,10 +21,11 @@
 
 **NexaTech 온보딩 RAG 지식 챗봇**은 120명 규모 B2B SaaS 기업의 8종 정예 사내 규정(취업규칙, 연차, 재택, 경비/법카, 복리후생, 보안, 연봉, 개발환경)을 기반으로 구축된 **엔터프라이즈급 온프레미스 RAG 서비스**입니다.
 
-사내 1급 기밀(연봉 테이블, 인사평가 등)의 외부 유출을 원천 차단하고, 사내 **NVIDIA DGX Spark GPU 서버(`sglang` + `Qwen3.8-Flash-NVFP4`)** 를 활용하여 **0.3초대 초고속 자체 추론**을 제공합니다.
+사내 1급 기밀(연봉 테이블, 인사평가 등)의 외부 유출을 원천 차단하고, 사내 **sLLM 서빙용 전용 GPU 워크스테이션(`sglang` + `Qwen3.8-Flash-NVFP4`)** 을 활용하여 **0.3초대 초고속 자체 추론**을 제공합니다.
 
 ### 3가지 실행 모드 완벽 지원
-1. **온프레미스 GPU 모드 (Primary)**: 사내 사설망에 격리된 DGX Spark GPU 서버와 보안 터널로 실시간 연동되어 0.3초대 초고속 추론 수행 (`enable_thinking: false` 최적화).
+1. **온프레미스 GPU 모드 (Primary)**: 사내 사설망에 격리된 sLLM 전용 GPU 서버와 보안 터널로 실시간 연동되어 0.3초대 초고속 추론 수행 (`enable_thinking: false` 최적화).
+
 2. **클라우드 BYOK 모드 (Fallback)**: Vercel 등 외부 배포 환경에서 사용자의 개인 OpenAI API 키(`gpt-4o-mini`)를 브라우저 `localStorage`에만 보관하고 요청 헤더(`x-byok-key`)로 단발성 중계하는 보안 모드.
 3. **검색 전용 모드 (Keyless Instant Demo)**: API 키나 사설 GPU 연결이 없는 환경에서도 심사자가 Vercel 배포본에서 BM25 검색, RBAC 분기, 신뢰도 점수, 근거 카드, 거부 로직을 즉시 체험 가능한 제로-컨피그 모드.
 
@@ -67,9 +68,10 @@
                                                                   ┌──────────────┴──────────────┐
                                                                   ▼                             ▼
                                                       [온프레미스 GPU 서빙 (Primary)]   [클라우드 BYOK (Fallback)]
-                                                      DGX Spark (sglang)             OpenAI (api.openai.com)
+                                                      sLLM Server (sglang)           OpenAI (api.openai.com)
                                                       Qwen3.8-Flash-NVFP4            gpt-4o-mini
                                                       0.32s 초저지연 (thinking:false)  사용자 키 / 서버 무저장
+
 ```
 
 ---
@@ -94,8 +96,10 @@
 온프레미스 인프라 아키텍처, 하드웨어 사이징(GPU VRAM 산정 공식), Docker 오케스트레이션 및 3개년 TCO(64% 절감)에 대한 상세 설계는 **[`docs/on-premise-architecture.md`](./docs/on-premise-architecture.md)** 에 완벽히 정리되어 있습니다.
 
 ```bash
-# [온프레미스 GPU 모드 (DGX Spark / sglang)]
-LLM_BASE_URL=http://spark-node.internal:8000/v1
+# [온프레미스 GPU 모드 (sLLM 워크스테이션 / sglang)]
+LLM_BASE_URL=http://sllm-server.internal:8000/v1
+
+
 LLM_MODEL=Inferact/Qwen3.8-Flash-Next-NVFP4
 
 # [클라우드 BYOK 모드 (OpenAI)]

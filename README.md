@@ -21,10 +21,11 @@
 
 **NexaTech Onboarding RAG Knowledge Assistant** is an enterprise-grade on-premise Retrieval-Augmented Generation (RAG) system built upon 8 curated corporate policy documents (Employment Rules, Annual Leave, Telecommuting, Expense/Corporate Card, Benefits, Information Security, Salary Grid, and Engineering Setup) for a virtual 120-person B2B SaaS company.
 
-It strictly safeguards confidential corporate data (such as executive salary grids and performance reviews) within an on-premise **NVIDIA DGX Spark GPU server (`sglang` + `Qwen3.8-Flash-NVFP4`)** providing **0.3-second sub-second local streaming inference**.
+It strictly safeguards confidential corporate data (such as executive salary grids and performance reviews) within an on-premise **dedicated sLLM GPU serving workstation (`sglang` + `Qwen3.8-Flash-NVFP4`)** providing **0.3-second sub-second local streaming inference**.
 
 ### 3 Execution Modes Supported Out of the Box:
-1. **On-Premise GPU Mode (Primary)**: Real-time streaming powered by a private on-premise DGX Spark GPU server via secure zero-trust tunnel with **0.32s sub-second latency** (`enable_thinking: false` latency optimization).
+1. **On-Premise GPU Mode (Primary)**: Real-time streaming powered by a private on-premise sLLM GPU server via secure zero-trust tunnel with **0.32s sub-second latency** (`enable_thinking: false` latency optimization).
+
 2. **Cloud BYOK Mode (Fallback)**: For public cloud deployments (e.g., Vercel), users can provide their personal OpenAI API key (`gpt-4o-mini`). The key is kept strictly in browser `localStorage` and relayed only via request headers (`x-byok-key`) with zero server retention.
 3. **Keyless Search-Only Mode (Zero-Config Demo)**: Reviewers without an API key or GPU tunnel can immediately evaluate the live Vercel deployment with full BM25 search, RBAC isolation, score breakdown, source cards, and hallucination rejection.
 
@@ -67,7 +68,7 @@ Built natively on `@langchain/core` and `@langchain/openai` using declarative **
                                                                   ┌──────────────┴──────────────┐
                                                                   ▼                             ▼
                                                       [On-Premise GPU Serving]        [Public Cloud BYOK]
-                                                      DGX Spark (sglang)             OpenAI (api.openai.com)
+                                                      sLLM Server (sglang)           OpenAI (api.openai.com)
                                                       Qwen3.8-Flash-NVFP4            gpt-4o-mini
                                                       0.32s Latency (thinking:false) User Key / Zero-Retention
 ```
@@ -94,8 +95,10 @@ Built natively on `@langchain/core` and `@langchain/openai` using declarative **
 Complete on-premise infrastructure architecture, hardware sizing equations (VRAM & KV cache capacity), Docker Compose orchestration, and 3-year TCO analysis (64% cost reduction) are thoroughly detailed in **[`docs/on-premise-architecture.md`](./docs/on-premise-architecture.md)**.
 
 ```bash
-# [On-Premise GPU Serving (DGX Spark / sglang)]
-LLM_BASE_URL=http://spark-node.internal:8000/v1
+# [On-Premise GPU Serving (sLLM Workstation / sglang)]
+LLM_BASE_URL=http://sllm-server.internal:8000/v1
+
+
 LLM_MODEL=Inferact/Qwen3.8-Flash-Next-NVFP4
 
 # [Public Cloud BYOK Mode (OpenAI)]

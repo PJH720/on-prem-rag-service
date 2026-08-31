@@ -14,15 +14,16 @@
 
 ---
 
-## 2. 참조 구현 및 실측 데이터 (DGX Spark GB10)
+## 2. 참조 구현 및 실측 데이터 (사내 sLLM 서빙용 워크스테이션)
 
-본 설계는 실제 구축 및 검증된 DGX Spark GPU 서버 인프라의 실측 벤치마크 데이터를 기반으로 작성되었습니다.
+본 설계는 실제 구축 및 검증된 사내 sLLM 서빙용 GPU 워크스테이션 인프라의 실측 벤치마크 데이터를 기반으로 작성되었습니다.
 
 ### 2.1 실측 하드웨어 및 런타임 환경
-- **호스트 인프라**: NVIDIA DGX Spark GB10 서버
-- **네트워크 토폴로지**: Zero-Trust 사설망 (`spark-gpu-node.internal:8000`)
+- **호스트 인프라**: 사내 sLLM 전용 GPU 워크스테이션
+- **네트워크 토폴로지**: Zero-Trust 사설망 (`sllm-server.internal:8000`)
 - **추론 프레임워크**: `sglang` (High-throughput LLM serving engine with RadixAttention)
 - **배포 모델**: `Inferact/Qwen3.8-Flash-Next-NVFP4`
+
 - **최대 컨텍스트 길이 (Max Context)**: 262,144 tokens (262K 초장문 컨텍스트 지원)
 - **가중치 양자화**: **NVFP4 (NVIDIA 4-bit Floating Point)** — 메모리 점유율을 대폭 절감하면서도 16-bit 부동소수점 대비 98% 이상의 MMLU/한국어 언어 이해도 보존.
 
@@ -55,9 +56,9 @@
 │       검색 및 지식 계층 (RAG Core)    │         │       추론 및 LLM 계층 (Serving)    │
 │                                     │         │                                     │
 │  1. RBAC 권한 사전 필터 (Pre-filter) │         │  [On-Premise Mode (Primary)]        │
-│     - role: all | hr | eng | fin    │         │   sglang DGX Spark Endpoint         │
+│     - role: all | hr | eng | fin    │         │   sglang sLLM Serving Node          │
 │                                     │         │   Model: Qwen3.8-Flash-NVFP4        │
-│  2. BM25 어휘 검색 엔진 (k1=1.2,b=0.75)│         │   BaseURL: http://spark-...:8000/v1 │
+│  2. BM25 어휘 검색 엔진 (k1=1.2,b=0.75)│         │   BaseURL: http://sllm-...:8000/v1  │
 │     - 바이그램 + 어절 하이브리드 토크나이저  │         │                                     │
 │                                     │         │  [Cloud BYOK Fallback Mode]         │
 │  3. 신뢰도 임계값 검증 (Threshold)    │         │   OpenAI 호환 API Gateway           │
@@ -129,7 +130,7 @@
 | 규모 | 동시 접속자 | 코퍼스 규모 | 권장 GPU 사양 | 시스템 메모리 | 스토리지 (SSD) | 예상 RPS / 지연 시간 |
 |---|---|---|---|---|---|---|
 | **소규모 (100명 미만)** | ~10 동시 사용자 | 500 문서 미만 | **1x NVIDIA RTX 4090 (24GB)** | 64GB DDR5 | 1TB NVMe | ~15 req/s (0.4초) |
-| **중규모 (100~1,000명)** | ~50 동시 사용자 | 5,000 문서 | **1x NVIDIA A100 / H100 (80GB)** 또는 **DGX Spark GB10** | 128GB ECC | 2TB NVMe Gen4 | ~60 req/s (0.25초) |
+| **중규모 (100~1,000명)** | ~50 동시 사용자 | 5,000 문서 | **1x NVIDIA A100 / H100 (80GB)** 또는 **sLLM 전용 고성능 워크스테이션** | 128GB ECC | 2TB NVMe Gen4 | ~60 req/s (0.25초) |
 | **엔터프라이즈 (1,000명 이상)** | 200+ 동시 사용자 | 50,000+ 문서 | **2x~4x NVIDIA H100 NVLink** (텐서 병렬화) | 256GB ECC | 4TB Enterprise RAID | 200+ req/s (0.15초) |
 
 ---
@@ -219,13 +220,14 @@ services:
 
 임직원 500명 기업이 매일 1인당 10건(월 100,000건 질의)의 사내 지식 검색을 수행한다고 가정한 3년 TCO 비교 분석입니다.
 
-| 비용 항목 | 상용 클라우드 API (GPT-4o 기준) | 온프레미스 DGX/RTX 서버 구축 |
+| 비용 항목 | 상용 클라우드 API (GPT-4o 기준) | 온프레미스 sLLM 전용 서버 구축 |
 |---|---|---|
 | **초기 도입비 (하드웨어/설치)** | 0원 | 약 1,800만원 (서버 1대 + GPU) |
 | **월간 토큰 사용료** | 월 약 180만원 (입출력 1.5억 토큰 기준) | **0원** (자체 추론) |
 | **월간 전력 및 상면 비용** | 0원 | 월 약 15만원 (800W 기준) |
 | **3년 총 소유 비용 (TCO)** | **약 6,480만원** | **약 2,340만원** |
 | **손익분기점 (BEP)** | - | **도입 11개월 차 손익분기 달성 (64% 비용 절감)** |
+
 
 ---
 

@@ -33,8 +33,9 @@ export function getModel({ isLocal, apiKey, customBaseUrl }: GetModelOptions): C
       maxRetries: 0,
       timeout: 15000,
       configuration: {
-        baseURL: customBaseUrl || process.env.LLM_BASE_URL || 'http://spark-node.internal:8000/v1',
+        baseURL: customBaseUrl || process.env.LLM_BASE_URL || 'http://sllm-server.internal:8000/v1',
       },
+
 
       modelKwargs: ONPREM_MODEL_KWARGS,
     });
