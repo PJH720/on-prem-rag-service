@@ -35,3 +35,4 @@ lerna-debug.log*
 *.log
 *.tsbuildinfo
 bin/
+plans/
