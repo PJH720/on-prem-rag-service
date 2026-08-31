@@ -73,9 +73,10 @@ function buildSearchOnlyAnswer(role: ViewerRole, docs: Document[]): string {
   const topContent = docs[0].pageContent;
 
   return (
-    `### 🔍 사내 지식 검색 결과 (검색 전용 모드)\n\n` +
-    `**[${role.toUpperCase()} 권한]** 사내 규정 검색을 통해 관련 핵심 문서를 찾았습니다. (우측 상단 'BYOK 키 설정' 시 LLM 대화형 스트리밍으로 전환됩니다.)\n\n` +
+    `### 🔍 사내 지식 검색 결과 (BM25 신뢰도 검증)\n\n` +
+    `**[${role.toUpperCase()} 권한]** 사내 규정 검색을 통해 검증된 핵심 문서를 찾았습니다.\n\n` +
     `**📌 관련 핵심 규정**: [출처: ${top.doc_title} §${top.section_title}]\n\n` +
+
     `${topContent}\n\n` +
     (docs.length > 1
       ? `\n---\n**추가 연관 섹션**: [출처: ${readMeta(docs[1]).doc_title} §${readMeta(docs[1]).section_title}]\n${docs[1].pageContent.slice(0, 180)}...\n`

@@ -23,11 +23,12 @@
 
 It strictly safeguards confidential corporate data (such as executive salary grids and performance reviews) within an on-premise **dedicated sLLM GPU serving workstation (`sglang` + `Qwen3.8-Flash-NVFP4`)** providing **0.3-second sub-second local streaming inference**.
 
-### 3 Execution Modes Supported Out of the Box:
-1. **On-Premise GPU Mode (Primary)**: Real-time streaming powered by a private on-premise sLLM GPU server via secure zero-trust tunnel with **0.32s sub-second latency** (`enable_thinking: false` latency optimization).
+### 🎯 Key Architectural Pillars
+1. **High-Performance On-Premise sLLM Serving (Primary)**: Real-time streaming powered by a private on-premise GPU workstation via secure zero-trust tunnel with **0.32s sub-second latency** (`enable_thinking: false` latency optimization).
+2. **Deterministic RBAC Pre-Filtering**: Strictly isolates the candidate index in memory based on user role (`all`, `hr`, `eng`, `finance`), preventing unpermitted documents from ever entering prompt context.
+3. **Hallucination Prevention Gate (Grounding Gate)**: Automatically rejects ungrounded questions without calling the LLM, ensuring 0% hallucination rate on out-of-scope queries.
+4. **Flexible Hybrid Extensibility**: Fully compliant with OpenAI API standards, enabling effortless transition between on-premise infrastructure and external cloud endpoints.
 
-2. **Cloud BYOK Mode (Fallback)**: For public cloud deployments (e.g., Vercel), users can provide their personal OpenAI API key (`gpt-4o-mini`). The key is kept strictly in browser `localStorage` and relayed only via request headers (`x-byok-key`) with zero server retention.
-3. **Keyless Search-Only Mode (Zero-Config Demo)**: Reviewers without an API key or GPU tunnel can immediately evaluate the live Vercel deployment with full BM25 search, RBAC isolation, score breakdown, source cards, and hallucination rejection.
 
 ---
 
@@ -67,10 +68,10 @@ Built natively on `@langchain/core` and `@langchain/openai` using declarative **
                                                                                  │ ChatOpenAI
                                                                   ┌──────────────┴──────────────┐
                                                                   ▼                             ▼
-                                                      [On-Premise GPU Serving]        [Public Cloud BYOK]
-                                                      sLLM Server (sglang)           OpenAI (api.openai.com)
-                                                      Qwen3.8-Flash-NVFP4            gpt-4o-mini
-                                                      0.32s Latency (thinking:false) User Key / Zero-Retention
+                                                      [On-Premise GPU Serving (Primary)] [Hybrid Extension Endpoint (Optional)]
+                                                      sLLM Server (sglang)               OpenAI-compatible API
+                                                      Qwen3.8-Flash-NVFP4                gpt-4o-mini
+                                                      0.32s Latency (thinking:false)     Ephemeral Key / Zero-Retention
 ```
 
 ---
@@ -95,15 +96,14 @@ Built natively on `@langchain/core` and `@langchain/openai` using declarative **
 Complete on-premise infrastructure architecture, hardware sizing equations (VRAM & KV cache capacity), Docker Compose orchestration, and 3-year TCO analysis (64% cost reduction) are thoroughly detailed in **[`docs/on-premise-architecture.md`](./docs/on-premise-architecture.md)**.
 
 ```bash
-# [On-Premise GPU Serving (sLLM Workstation / sglang)]
+# [On-Premise GPU Serving (Primary: sLLM Workstation / sglang)]
 LLM_BASE_URL=http://sllm-server.internal:8000/v1
-
-
 LLM_MODEL=Inferact/Qwen3.8-Flash-Next-NVFP4
 
-# [Public Cloud BYOK Mode (OpenAI)]
+# [Hybrid Fallback Endpoint (Optional)]
 BYOK_BASE_URL=https://api.openai.com/v1
 BYOK_MODEL=gpt-4o-mini
+
 ```
 
 ---

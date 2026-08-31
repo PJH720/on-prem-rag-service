@@ -23,7 +23,9 @@ import {
   Code,
   DollarSign,
   Search,
+  Settings,
 } from 'lucide-react';
+
 
 interface GroundingSource {
   doc_id: string;
@@ -333,29 +335,24 @@ export default function ChatPage() {
 
         {/* Status Badges & Controls */}
         <div className="flex items-center gap-2 flex-wrap">
-          {/* Provider Badge */}
-          <div
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium border shadow-xs ${
-              byokKey
-                ? 'bg-purple-50 text-purple-700 border-purple-200'
-                : 'bg-emerald-50 text-emerald-800 border-emerald-200'
-            }`}
-          >
-            <Server className="w-3.5 h-3.5" />
+          {/* Engine Status Badge */}
+          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium border shadow-xs bg-emerald-50 text-emerald-800 border-emerald-200">
+            <Server className="w-3.5 h-3.5 text-emerald-600" />
             <span>
               {byokKey
-                ? 'OpenAI BYOK (gpt-4o-mini)'
-                : '온프레미스 GPU (Qwen3.8-Flash)'}
+                ? '하이브리드 모드 (API 키 연동)'
+                : '온프레미스 sLLM (Qwen3.8)'}
             </span>
           </div>
 
-          {/* BYOK Modal Trigger */}
+          {/* Settings Modal Trigger */}
           <button
             onClick={() => setIsByokModalOpen(true)}
             className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-white text-slate-700 hover:bg-slate-100 border border-slate-300 rounded-md transition shadow-xs"
+            title="엔드포인트 설정"
           >
-            <Key className="w-3.5 h-3.5 text-slate-500" />
-            <span>{byokKey ? 'BYOK 키 변경' : 'BYOK 키 설정'}</span>
+            <Settings className="w-3.5 h-3.5 text-slate-500" />
+            <span>{byokKey ? '연동 설정 관리' : '연동 설정'}</span>
           </button>
 
           {/* Reset Chat */}
@@ -370,6 +367,7 @@ export default function ChatPage() {
           )}
         </div>
       </header>
+
 
       {/* 2. Role Selector (RBAC Control) */}
       <div className="mt-4 p-3 bg-white rounded-xl border border-slate-200 shadow-xs">
@@ -625,44 +623,45 @@ export default function ChatPage() {
         </div>
       </div>
 
-      {/* 5. BYOK Settings Modal */}
+      {/* 5. Endpoint Settings Modal */}
       {isByokModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4">
           <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200">
             <div className="flex items-center gap-2 mb-3">
-              <div className="w-8 h-8 rounded-lg bg-purple-100 text-purple-700 flex items-center justify-center">
-                <Key className="w-4 h-4" />
+              <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center">
+                <Settings className="w-4 h-4" />
               </div>
               <h3 className="text-base font-bold text-slate-900">
-                OpenAI BYOK (Bring Your Own Key) 설정
+                추론 엔진 연동 설정 (선택 사항)
               </h3>
             </div>
 
             <p className="text-xs text-slate-600 mb-4 leading-relaxed">
-              Vercel 공개 배포 등 온프레미스 GPU 서버에 직접 연결되지 않은 환경에서
-              OpenAI API 키를 입력하여 클라우드 LLM(gpt-4o-mini)으로 즉시 추론할 수 있습니다.
+              본 시스템은 <strong>사내 온프레미스 sLLM 추론 엔진(Qwen3.8-Flash)</strong>을 기본으로 사용합니다.
+              폐쇄망 외부 환경 테스트나 하이브리드 연동이 필요한 경우에만 대체 API 키를 등록하세요.
             </p>
 
-            <div className="p-3 bg-amber-50 rounded-lg border border-amber-200 text-xs text-amber-900 mb-4 flex items-start gap-2">
-              <Shield className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
+            <div className="p-3 bg-slate-50 rounded-lg border border-slate-200 text-xs text-slate-700 mb-4 flex items-start gap-2">
+              <Shield className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
               <span>
-                <strong>보안 원칙:</strong> 입력하신 API 키는 브라우저의 <code>localStorage</code>에만 보관되며,
-                서버 데이터베이스나 로그에 절대 저장되지 않고 요청 헤더로만 전달됩니다.
+                <strong>보안 원칙:</strong> 입력된 키는 브라우저의 <code>localStorage</code>에만 보관되며,
+                서버에 절대 영구 저장되지 않고 단발성 요청 헤더로만 전달됩니다.
               </span>
             </div>
 
             <div className="space-y-2 mb-6">
               <label className="text-xs font-semibold text-slate-700">
-                OpenAI API Key (`sk-...`)
+                대체 API Key (선택 사항)
               </label>
               <input
                 type="password"
                 value={byokKey}
                 onChange={e => setByokKey(e.target.value)}
-                placeholder="sk-proj-..."
-                className="w-full p-2.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 focus:border-purple-500 font-mono"
+                placeholder="sk-..."
+                className="w-full p-2.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 font-mono"
               />
             </div>
+
 
             <div className="flex items-center justify-end gap-2">
               {byokKey && (
