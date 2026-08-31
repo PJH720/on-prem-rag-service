@@ -30,12 +30,15 @@ export function getModel({ isLocal, apiKey, customBaseUrl }: GetModelOptions): C
       streaming: true,
       // sglang은 stream_options를 지원하지 않을 수 있다. 켜두면 400으로 죽는다.
       streamUsage: false,
+      maxRetries: 0,
+      timeout: 4000,
       configuration: {
         baseURL: customBaseUrl || process.env.LLM_BASE_URL || 'http://spark-node.internal:8000/v1',
       },
       modelKwargs: ONPREM_MODEL_KWARGS,
     });
   }
+
 
   if (!apiKey) throw new Error('BYOK mode requires a user-supplied API key');
 
