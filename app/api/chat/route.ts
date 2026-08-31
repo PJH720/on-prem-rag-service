@@ -6,6 +6,8 @@ import type { Document } from '@langchain/core/documents';
 import type { ChatOpenAI } from '@langchain/openai';
 
 import { RbacBm25Retriever, evaluateGrounding, readMeta, type GroundingGate } from '@/lib/retriever';
+import { sanitizeRetrievalQuery } from '@/lib/search';
+import { tokenize } from '@/lib/tokenizer';
 import { getModel, resolveProvider } from '@/lib/llm';
 import { answerPrompt, formatDocsAsXml } from '@/lib/prompt';
 import type { ViewerRole } from '@/lib/rbac';
@@ -134,9 +136,11 @@ export async function POST(req: NextRequest) {
     const provider = resolveProvider(byokKey);
 
     // 1. RBAC 선필터 + BM25 검색 (체인 밖에서 1회)
+    const searchQuery = sanitizeRetrievalQuery(message);
+    const searchTokens = tokenize(searchQuery);
     const retriever = new RbacBm25Retriever({ role, k: 4 });
-    const docs = await retriever.invoke(message);
-    const gate = evaluateGrounding(docs);
+    const docs = await retriever.invoke(searchQuery);
+    const gate = evaluateGrounding(docs, searchTokens.length);
     const sources = toSources(docs);
 
     // 2. 신뢰도 게이트 — LLM 호출 없이 즉시 거부

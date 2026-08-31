@@ -1,6 +1,7 @@
 import { BaseRetriever, type BaseRetrieverInput } from '@langchain/core/retrievers';
 import { Document } from '@langchain/core/documents';
 import { tokenize } from './tokenizer';
+import { expandSynonyms } from './search';
 import { canView, type ViewerRole, type AccessRole } from './rbac';
 import rawIndex from '../data/index.json';
 
@@ -81,7 +82,8 @@ export class RbacBm25Retriever extends BaseRetriever {
   }
 
   async _getRelevantDocuments(query: string): Promise<Document[]> {
-    const queryTerms = tokenize(query);
+    const rawTerms = tokenize(query);
+    const queryTerms = expandSynonyms(rawTerms);
     if (queryTerms.length === 0) return [];
 
     const scored: Array<{ doc: IndexedDoc; score: number; matched: string[] }> = [];
@@ -127,15 +129,17 @@ export class RbacBm25Retriever extends BaseRetriever {
 const MIN_SCORE = Number(process.env.RAG_REJECTION_THRESHOLD ?? 10);
 const MIN_SHALLOW_SCORE = Number(process.env.RAG_SHALLOW_SCORE ?? 18);
 
-export type GateReason = 'ok' | 'no_results' | 'below_threshold' | 'shallow_match';
+export type GateReason = 'ok' | 'no_results' | 'below_threshold' | 'shallow_match' | 'low_coverage';
 
 export interface GroundingGate {
   grounded: boolean;
   topScore: number;
   reason: GateReason;
+  coverage?: number;
+  compositeScore?: number;
 }
 
-export function evaluateGrounding(docs: Document[]): GroundingGate {
+export function evaluateGrounding(docs: Document[], queryTokenCount?: number): GroundingGate {
   if (docs.length === 0) return { grounded: false, topScore: 0, reason: 'no_results' };
 
   const top = readMeta(docs[0]);
@@ -147,5 +151,29 @@ export function evaluateGrounding(docs: Document[]): GroundingGate {
   if (top.matchedTerms.length < 2 && top.score < MIN_SHALLOW_SCORE) {
     return { grounded: false, topScore: top.score, reason: 'shallow_match' };
   }
+
+  // Coverage-based composite gate (when queryTokenCount is provided)
+  if (queryTokenCount != null && queryTokenCount > 0) {
+    const coverage = top.matchedTerms.length / queryTokenCount;
+    const norm = top.score / (top.score + 15);
+    const composite = coverage * norm;
+    if (composite < 0.10) {
+      return {
+        grounded: false,
+        topScore: top.score,
+        reason: 'low_coverage',
+        coverage,
+        compositeScore: composite,
+      };
+    }
+    return {
+      grounded: true,
+      topScore: top.score,
+      reason: 'ok',
+      coverage,
+      compositeScore: composite,
+    };
+  }
+
   return { grounded: true, topScore: top.score, reason: 'ok' };
 }

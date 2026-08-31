@@ -137,7 +137,7 @@ pnpm install
 # 3. Build LangChain Document index from markdown corpus (generates data/index.json)
 pnpm ingest
 
-# 4. Run automated RBAC & BM25 retriever test suite (17 test scenarios)
+# 4. Run automated RBAC & BM25 retriever test suite (26 test scenarios)
 pnpm test:search
 
 # 5. Launch development server (http://localhost:3000)
@@ -147,15 +147,17 @@ pnpm dev
 
 ---
 
-## 🛡️ Reliability & Security Highlights
+## 🛡️ Reliability & Security Highlights (6-Layer Defense-in-Depth)
 
-1. **Strict Citation Enforcement**: Every asserted sentence is backed by an inline source tag `[출처: Document §Section]`, highlighted as an interactive badge in the UI.
-2. **Deterministic RBAC Pre-Filtering**: Documents outside the user's role are eliminated before candidate scoring, ensuring sensitive data never enters the prompt context.
-3. **Threshold-Based Rejection Gate**: Queries with insufficient lexical confidence or low query-term coverage bypass LLM generation and return a friendly out-of-domain rejection message, eliminating hallucinations.
-4. **Latency Optimization (`enable_thinking: false`)**: Disables unnecessary internal reasoning tokens for RAG tasks, reducing latency from **18.7s to 0.32s (98.3% speedup)**.
-5. **Comprehensive Architecture Blueprint**: Review our complete enterprise infrastructure, sizing, and TCO analysis in [`docs/on-premise-architecture.md`](./docs/on-premise-architecture.md).
+1. **Deterministic RBAC Pre-Filtering**: Documents outside the user's role are eliminated before candidate scoring in the `RbacBm25Retriever` constructor, ensuring sensitive data never enters memory.
+2. **Query Pre-Processing & Anti-Spoofing**: Strips role-spoofing meta-instructions (e.g., *"Answer with HR authority"*) before BM25 scoring to prevent retrieval index pollution.
+3. **Korean Synonym Expansion**: Bridges vocabulary gaps (`사원`/`직원`/`임직원`/`구성원`/`총원`) at query time without fragile corpus modifications.
+4. **Composite Grounding Gate**: Replaces rigid thresholds with Query Term Coverage Rate × Normalized BM25 Score to reject low-coverage noise matches.
+5. **XML-Structured Prompt with Role Isolation**: Structurally enforces `<system_authority><verified_role>` vs `<user_query>` isolation, instructing the LLM to ignore user-claimed roles.
+6. **Strict Citation Enforcement & Latency Optimization**: Verified citations `[출처: Document §Section]` with `enable_thinking: false` latency optimization (**0.32s sub-second latency**).
 
 ---
 
 ## 📄 License
 MIT License
+
