@@ -9,10 +9,10 @@ importers:
   .:
     dependencies:
       clsx:
-        specifier: ^2.1.1
+        specifier: 2.1.1
         version: 2.1.1
       gray-matter:
-        specifier: ^4.0.3
+        specifier: 4.0.3
         version: 4.0.3
       lucide-react:
         specifier: ^1.37.0
@@ -21,38 +21,38 @@ importers:
         specifier: ^16.3.3
         version: 16.3.3(@types/node@26.4.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       react:
-        specifier: ^19.2.8
+        specifier: ^19.0.0
         version: 19.2.8
       react-dom:
-        specifier: ^19.2.8
+        specifier: ^19.0.0
         version: 19.2.8(react@19.2.8)
       tailwind-merge:
-        specifier: ^3.6.0
+        specifier: 3.6.0
         version: 3.6.0
     devDependencies:
       '@types/node':
-        specifier: ^26.4.0
+        specifier: 26.4.0
         version: 26.4.0
       '@types/react':
-        specifier: ^19.2.18
+        specifier: 19.2.18
         version: 19.2.18
       '@types/react-dom':
-        specifier: ^19.2.5
+        specifier: 19.2.5
         version: 19.2.5(@types/react@19.2.18)
       autoprefixer:
-        specifier: ^10.5.4
+        specifier: 10.5.4
         version: 10.5.4(postcss@8.5.26)
       postcss:
-        specifier: ^8.5.26
+        specifier: 8.5.26
         version: 8.5.26
       tailwindcss:
-        specifier: ^3.4.19
+        specifier: 3.4.19
         version: 3.4.19(tsx@4.23.13)
       tsx:
-        specifier: ^4.23.13
+        specifier: 4.23.13
         version: 4.23.13
       typescript:
-        specifier: ^7.0.2
+        specifier: 7.0.2
         version: 7.0.2
 
 packages:
