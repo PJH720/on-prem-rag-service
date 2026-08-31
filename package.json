@@ -1,0 +1,32 @@
+{
+  "name": "on-prem-rag-service",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "ingest": "tsx scripts/ingest.ts",
+    "test:search": "tsx scripts/test-search.ts"
+  },
+  "dependencies": {
+    "clsx": "2.1.1",
+    "gray-matter": "4.0.3",
+    "lucide-react": "^1.37.0",
+    "next": "^15.2.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "tailwind-merge": "3.6.0"
+  },
+  "devDependencies": {
+    "@types/node": "26.4.0",
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.5",
+    "autoprefixer": "10.5.4",
+    "postcss": "8.5.26",
+    "tailwindcss": "3.4.19",
+    "tsx": "4.23.13",
+    "typescript": "7.0.2"
+  },
+  "packageManager": "pnpm@10.29.3"
+}

@@ -1,0 +1,696 @@
+'use client';
+
+import React, { useState, useEffect, useRef } from 'react';
+import { Role } from '@/lib/types';
+import {
+  Shield,
+  Server,
+  Key,
+  Send,
+  Sparkles,
+  ChevronDown,
+  ChevronUp,
+  FileText,
+  AlertCircle,
+  CheckCircle2,
+  Lock,
+  ExternalLink,
+  RefreshCw,
+  Trash2,
+  HelpCircle,
+  Building2,
+  Users,
+  Code,
+  DollarSign,
+} from 'lucide-react';
+
+interface GroundingSource {
+  doc_id: string;
+  doc_title: string;
+  section_title: string;
+  score: number;
+  normalizedScore: number;
+  snippet: string;
+  access_role: Role;
+}
+
+interface Message {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  sources?: GroundingSource[];
+  confidence?: 'high' | 'rejected';
+  rejected?: boolean;
+  provider?: string;
+  model?: string;
+  queryRole?: Role;
+}
+
+const EXAMPLE_QUERIES = [
+  {
+    title: '연차 사용 규정',
+    query: '연차는 입사 후 언제부터 쓸 수 있나요?',
+    role: 'all' as Role,
+    desc: '기본 온보딩 질의 (전사)',
+  },
+  {
+    title: '식대 및 경비 정산',
+    query: '법인카드로 결제한 식대는 어떻게 정산하나요?',
+    role: 'all' as Role,
+    desc: '다중 문서 종합 검색 (전사)',
+  },
+  {
+    title: '연봉 테이블 조회',
+    query: '직급별 연봉 테이블 알려주세요',
+    role: 'hr' as Role,
+    desc: '★ RBAC 권한 분기 데모 (인사팀 vs 전사)',
+  },
+  {
+    title: '개발 환경 셋업',
+    query: '로컬 개발 DB는 어떻게 구동하나요?',
+    role: 'eng' as Role,
+    desc: '개발팀 전용 문서 (개발팀)',
+  },
+  {
+    title: '미등록 질문 거부',
+    query: '오늘 구내식당 점심 메뉴 뭐야?',
+    role: 'all' as Role,
+    desc: '★ 근거 부족 시 환각 방지 거부 데모',
+  },
+];
+
+const ROLES: { id: Role; label: string; icon: React.ReactNode; desc: string; badgeColor: string }[] = [
+  {
+    id: 'all',
+    label: '전사 (General)',
+    icon: <Users className="w-4 h-4" />,
+    desc: '일반 사내 규정, 복리후생, 근무 지침 열람',
+    badgeColor: 'bg-slate-100 text-slate-700 border-slate-300',
+  },
+  {
+    id: 'hr',
+    label: '인사팀 (HR)',
+    icon: <Building2 className="w-4 h-4" />,
+    desc: '★ 연봉 테이블(HR-011), 인사평가 세칙(HR-012) 열람 가능',
+    badgeColor: 'bg-purple-100 text-purple-800 border-purple-300',
+  },
+  {
+    id: 'eng',
+    label: '개발팀 (Engineering)',
+    icon: <Code className="w-4 h-4" />,
+    desc: '개발 환경 셋업(ENG-001), 코드리뷰/배포 규정(ENG-002) 열람 가능',
+    badgeColor: 'bg-blue-100 text-blue-800 border-blue-300',
+  },
+  {
+    id: 'finance',
+    label: '재무팀 (Finance)',
+    icon: <DollarSign className="w-4 h-4" />,
+    desc: '예산 집행 승인 한도(FIN-011), 전결 규정 열람 가능',
+    badgeColor: 'bg-emerald-100 text-emerald-800 border-emerald-300',
+  },
+];
+
+export default function ChatPage() {
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [input, setInput] = useState('');
+  const [currentRole, setCurrentRole] = useState<Role>('all');
+  const [isLoading, setIsLoading] = useState(false);
+  const [byokKey, setByokKey] = useState('');
+  const [isByokModalOpen, setIsByokModalOpen] = useState(false);
+  const [openSources, setOpenSources] = useState<Record<string, boolean>>({});
+
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  // Load BYOK key from localStorage on mount
+  useEffect(() => {
+    const saved = localStorage.getItem('nexatech_byok_key');
+    if (saved) setByokKey(saved);
+  }, []);
+
+  const handleSaveByok = (key: string) => {
+    setByokKey(key);
+    if (key.trim()) {
+      localStorage.setItem('nexatech_byok_key', key.trim());
+    } else {
+      localStorage.removeItem('nexatech_byok_key');
+    }
+    setIsByokModalOpen(false);
+  };
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
+
+  const toggleSources = (msgId: string) => {
+    setOpenSources(prev => ({ ...prev, [msgId]: !prev[msgId] }));
+  };
+
+  const handleSend = async (queryText?: string, overrideRole?: Role) => {
+    const textToSend = queryText || input;
+    const roleToSend = overrideRole || currentRole;
+
+    if (!textToSend.trim() || isLoading) return;
+
+    const userMessageId = `user_${Date.now()}`;
+    const assistantMessageId = `asst_${Date.now()}`;
+
+    const userMsg: Message = {
+      id: userMessageId,
+      role: 'user',
+      content: textToSend.trim(),
+      queryRole: roleToSend,
+    };
+
+    setMessages(prev => [...prev, userMsg]);
+    if (!queryText) setInput('');
+    setIsLoading(true);
+
+    try {
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(byokKey ? { 'x-byok-key': byokKey } : {}),
+        },
+        body: JSON.stringify({
+          message: textToSend.trim(),
+          role: roleToSend,
+          history: messages.slice(-4).map(m => ({ role: m.role, content: m.content })),
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`서버 오류 발생 (${response.status})`);
+      }
+
+      if (!response.body) {
+        throw new Error('응답 스트림이 없습니다.');
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+
+      let assistantContent = '';
+      let metadataParsed = false;
+      let metaObj: {
+        confidence?: 'high' | 'rejected';
+        provider?: string;
+        model?: string;
+        sources?: GroundingSource[];
+        rejected?: boolean;
+      } = {};
+
+      let buffer = '';
+
+      // Initialize assistant message placeholder
+      setMessages(prev => [
+        ...prev,
+        {
+          id: assistantMessageId,
+          role: 'assistant',
+          content: '',
+          queryRole: roleToSend,
+        },
+      ]);
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+
+        if (!metadataParsed) {
+          const metaIndex = buffer.indexOf('__METADATA__:');
+          const endMetaIndex = buffer.indexOf('\n\n');
+
+          if (metaIndex !== -1 && endMetaIndex !== -1) {
+            const metaJson = buffer.slice(metaIndex + '__METADATA__:'.length, endMetaIndex);
+            try {
+              metaObj = JSON.parse(metaJson);
+              metadataParsed = true;
+              buffer = buffer.slice(endMetaIndex + 2);
+
+              // Auto-open sources if high confidence
+              setOpenSources(prev => ({
+                ...prev,
+                [assistantMessageId]: metaObj.confidence === 'high',
+              }));
+            } catch (e) {
+              console.error('Failed to parse metadata:', e);
+            }
+          }
+        }
+
+        if (metadataParsed) {
+          assistantContent += buffer;
+          buffer = '';
+
+          setMessages(prev =>
+            prev.map(m =>
+              m.id === assistantMessageId
+                ? {
+                    ...m,
+                    content: assistantContent,
+                    sources: metaObj.sources,
+                    confidence: metaObj.confidence,
+                    rejected: metaObj.rejected,
+                    provider: metaObj.provider,
+                    model: metaObj.model,
+                  }
+                : m
+            )
+          );
+        }
+      }
+    } catch (err: unknown) {
+      console.error(err);
+      const errMsg = err instanceof Error ? err.message : '답변 생성 중 오류가 발생했습니다.';
+      setMessages(prev => [
+        ...prev,
+        {
+          id: assistantMessageId,
+          role: 'assistant',
+          content: `⚠️ 오류: ${errMsg}\n\n온프레미스 GPU 서버 또는 BYOK API 설정을 확인해 주세요.`,
+          confidence: 'rejected',
+          rejected: true,
+          queryRole: roleToSend,
+        },
+      ]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSend();
+    }
+  };
+
+  // Highlight citation tags like [출처: 문서명 §섹션]
+  const renderFormattedContent = (content: string) => {
+    const parts = content.split(/(\[출처:\s*[^\]]+\])/g);
+    return parts.map((part, i) => {
+      if (part.startsWith('[출처:') && part.endsWith(']')) {
+        return (
+          <span
+            key={i}
+            className="inline-flex items-center px-2 py-0.5 my-0.5 mx-1 rounded text-xs font-semibold bg-emerald-100 text-emerald-800 border border-emerald-300 shadow-sm"
+          >
+            🔖 {part.slice(1, -1)}
+          </span>
+        );
+      }
+      return <span key={i}>{part}</span>;
+    });
+  };
+
+  return (
+    <div className="flex flex-col flex-1 max-w-6xl w-full mx-auto p-4 sm:p-6 min-h-screen">
+      {/* 1. Header */}
+      <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200">
+        <div>
+          <div className="flex items-center gap-2">
+            <div className="w-9 h-9 rounded-lg bg-emerald-600 flex items-center justify-center text-white shadow">
+              <Shield className="w-5 h-5" />
+            </div>
+            <div>
+              <h1 className="text-xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
+                NexaTech 사내 온보딩 지식 챗봇
+                <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 border border-emerald-200">
+                  RAG v1.0
+                </span>
+              </h1>
+              <p className="text-xs text-slate-500">
+                온프레미스 GPU 추론 기반 고신뢰도 사내 지식 검색 시스템 (BM25 + RBAC 보안 필터)
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Status Badges & Controls */}
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Provider Badge */}
+          <div
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium border shadow-sm ${
+              byokKey
+                ? 'bg-purple-50 text-purple-700 border-purple-200'
+                : 'bg-emerald-50 text-emerald-800 border-emerald-200'
+            }`}
+          >
+            <Server className="w-3.5 h-3.5" />
+            <span>
+              {byokKey
+                ? 'OpenAI BYOK (gpt-4o-mini)'
+                : '온프레미스 GPU (DGX Spark Qwen3.8-Flash)'}
+            </span>
+          </div>
+
+          {/* BYOK Modal Trigger */}
+          <button
+            onClick={() => setIsByokModalOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-white text-slate-700 hover:bg-slate-100 border border-slate-300 rounded-md transition shadow-sm"
+          >
+            <Key className="w-3.5 h-3.5 text-slate-500" />
+            <span>{byokKey ? 'BYOK 키 변경' : 'BYOK 키 설정'}</span>
+          </button>
+
+          {/* Reset Chat */}
+          {messages.length > 0 && (
+            <button
+              onClick={() => setMessages([])}
+              title="대화 초기화"
+              className="p-1.5 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-md border border-slate-200 transition"
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
+          )}
+        </div>
+      </header>
+
+      {/* 2. Role Selector (RBAC Control) */}
+      <div className="mt-4 p-3 bg-white rounded-xl border border-slate-200 shadow-sm">
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-1.5 text-xs font-bold text-slate-700">
+            <Lock className="w-3.5 h-3.5 text-slate-500" />
+            <span>질문자 접근 권한 (RBAC Role 선택)</span>
+          </div>
+          <span className="text-xs text-slate-500">
+            권한에 따라 검색 대상 문서가 사전 필터링(Pre-filter)됩니다.
+          </span>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          {ROLES.map(r => {
+            const isSelected = currentRole === r.id;
+            return (
+              <button
+                key={r.id}
+                onClick={() => setCurrentRole(r.id)}
+                className={`flex flex-col items-start p-2.5 rounded-lg border text-left transition-all ${
+                  isSelected
+                    ? 'bg-slate-900 text-white border-slate-900 shadow-md ring-2 ring-slate-900/10'
+                    : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200'
+                }`}
+              >
+                <div className="flex items-center gap-1.5 font-semibold text-xs mb-1">
+                  {r.icon}
+                  <span>{r.label}</span>
+                </div>
+                <span
+                  className={`text-[11px] leading-tight line-clamp-1 ${
+                    isSelected ? 'text-slate-300' : 'text-slate-500'
+                  }`}
+                >
+                  {r.desc}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* 3. Chat Messages Feed */}
+      <div className="flex-1 overflow-y-auto my-4 space-y-4 pr-1">
+        {messages.length === 0 ? (
+          <div className="h-full flex flex-col items-center justify-center p-6 text-center max-w-2xl mx-auto">
+            <div className="w-14 h-14 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center mb-4 shadow-inner">
+              <Sparkles className="w-7 h-7" />
+            </div>
+            <h2 className="text-lg font-bold text-slate-800 mb-2">
+              무엇이든 물어보세요!
+            </h2>
+            <p className="text-xs text-slate-600 mb-6 leading-relaxed">
+              넥사테크 15종 사내 규정(연차, 경비, 복지, 개발 환경, 보안 등)에 기반하여
+              정확한 출처 인용과 함께 답변합니다.
+            </p>
+
+            {/* Example Queries */}
+            <div className="w-full space-y-2">
+              <div className="text-xs font-semibold text-slate-500 text-left mb-1 flex items-center gap-1">
+                <HelpCircle className="w-3.5 h-3.5" />
+                <span>추천 테스트 질의 (클릭 시 자동 실행):</span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-left">
+                {EXAMPLE_QUERIES.map((eq, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => {
+                      setCurrentRole(eq.role);
+                      handleSend(eq.query, eq.role);
+                    }}
+                    className="p-3 bg-white hover:bg-slate-50 border border-slate-200 hover:border-emerald-500 rounded-lg shadow-sm transition group"
+                  >
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="font-semibold text-xs text-slate-800 group-hover:text-emerald-700">
+                        {eq.title}
+                      </span>
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200">
+                        {eq.role}
+                      </span>
+                    </div>
+                    <div className="text-xs text-slate-600 mb-1">{eq.query}</div>
+                    <div className="text-[10px] text-slate-400">{eq.desc}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        ) : (
+          messages.map(m => {
+            const isUser = m.role === 'user';
+            const isRejected = m.rejected;
+            const isSourcesOpen = openSources[m.id] ?? false;
+
+            return (
+              <div
+                key={m.id}
+                className={`flex flex-col ${isUser ? 'items-end' : 'items-start'} space-y-2`}
+              >
+                {/* Role badge for query context */}
+                {isUser && m.queryRole && (
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-200 text-slate-700 font-medium">
+                    권한: {m.queryRole.toUpperCase()}
+                  </span>
+                )}
+
+                {/* Message Bubble */}
+                <div
+                  className={`max-w-3xl rounded-2xl p-4 shadow-sm text-sm leading-relaxed whitespace-pre-wrap ${
+                    isUser
+                      ? 'bg-slate-900 text-white rounded-br-none'
+                      : isRejected
+                      ? 'bg-amber-50 text-slate-800 border border-amber-200 rounded-bl-none'
+                      : 'bg-white text-slate-800 border border-slate-200 rounded-bl-none'
+                  }`}
+                >
+                  {isUser ? m.content : renderFormattedContent(m.content)}
+                </div>
+
+                {/* Grounding & Confidence Panel (Assistant only) */}
+                {!isUser && (
+                  <div className="w-full max-w-3xl space-y-2">
+                    {/* Status Bar */}
+                    <div className="flex items-center justify-between flex-wrap gap-2 text-xs">
+                      {/* Confidence Tag */}
+                      <div className="flex items-center gap-1.5">
+                        {isRejected ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 font-medium border border-amber-300">
+                            <AlertCircle className="w-3.5 h-3.5" />
+                            근거 부족 (환각 방지 거부)
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-medium border border-emerald-300">
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                            사내 문서 근거 100% 매칭
+                          </span>
+                        )}
+
+                        {m.model && (
+                          <span className="text-[11px] text-slate-400">
+                            모델: {m.model}
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Source Toggle Button */}
+                      {m.sources && m.sources.length > 0 && (
+                        <button
+                          onClick={() => toggleSources(m.id)}
+                          className="flex items-center gap-1 text-slate-600 hover:text-slate-900 font-medium bg-slate-100 hover:bg-slate-200 px-2.5 py-1 rounded-md transition"
+                        >
+                          <FileText className="w-3.5 h-3.5 text-slate-500" />
+                          <span>참조 문서 근거 ({m.sources.length}건)</span>
+                          {isSourcesOpen ? (
+                            <ChevronUp className="w-3.5 h-3.5" />
+                          ) : (
+                            <ChevronDown className="w-3.5 h-3.5" />
+                          )}
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Sources Cards View */}
+                    {isSourcesOpen && m.sources && m.sources.length > 0 && (
+                      <div className="grid grid-cols-1 gap-2 pt-1">
+                        {m.sources.map((src, sIdx) => (
+                          <div
+                            key={sIdx}
+                            className="p-3 bg-slate-50 rounded-lg border border-slate-200 text-xs space-y-1.5 shadow-xs"
+                          >
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-1.5 font-bold text-slate-800">
+                                <span className="px-1.5 py-0.5 bg-slate-200 rounded text-[10px] font-mono">
+                                  {src.doc_id}
+                                </span>
+                                <span>{src.doc_title}</span>
+                                <span className="text-slate-500 font-normal">
+                                  § {src.section_title}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <span className="px-1.5 py-0.5 rounded text-[10px] bg-slate-200 text-slate-700">
+                                  권한: {src.access_role}
+                                </span>
+                                <span className="px-1.5 py-0.5 rounded text-[10px] bg-emerald-100 text-emerald-800 font-semibold">
+                                  BM25: {src.score.toFixed(1)} (
+                                  {Math.round(src.normalizedScore * 100)}%)
+                                </span>
+                              </div>
+                            </div>
+                            <p className="text-slate-600 leading-relaxed bg-white p-2 rounded border border-slate-100">
+                              {src.snippet}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })
+        )}
+        <div ref={messagesEndRef} />
+      </div>
+
+      {/* 4. Input Area */}
+      <div className="pt-2">
+        <form
+          onSubmit={e => {
+            e.preventDefault();
+            handleSend();
+          }}
+          className="relative bg-white rounded-xl border border-slate-300 shadow-sm focus-within:ring-2 focus-within:ring-emerald-600 focus-within:border-emerald-600 transition"
+        >
+          <textarea
+            ref={inputRef}
+            rows={2}
+            value={input}
+            onChange={e => setInput(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder={`[${currentRole.toUpperCase()} 권한] 사내 규정이나 온보딩 관련 질문을 입력하세요... (Enter로 전송, Shift+Enter로 줄바꿈)`}
+            className="w-full p-3 pr-24 bg-transparent border-0 resize-none focus:outline-none text-sm text-slate-800 placeholder-slate-400"
+          />
+
+          <div className="absolute right-2 bottom-2.5 flex items-center gap-1">
+            <button
+              type="submit"
+              disabled={isLoading || !input.trim()}
+              className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 shadow transition"
+            >
+              {isLoading ? (
+                <>
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                  <span>생성 중</span>
+                </>
+              ) : (
+                <>
+                  <span>전송</span>
+                  <Send className="w-3.5 h-3.5" />
+                </>
+              )}
+            </button>
+          </div>
+        </form>
+
+        <div className="flex items-center justify-between mt-2 text-[11px] text-slate-400 px-1">
+          <span>
+            💡 모든 답변은 사내 지식 베이스 검색 청크에 100% 근거하며 출처가 명시됩니다.
+          </span>
+          <span className="font-mono">Next.js 15 + BM25 RBAC</span>
+        </div>
+      </div>
+
+      {/* 5. BYOK Settings Modal */}
+      {isByokModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200">
+            <div className="flex items-center gap-2 mb-3">
+              <div className="w-8 h-8 rounded-lg bg-purple-100 text-purple-700 flex items-center justify-center">
+                <Key className="w-4 h-4" />
+              </div>
+              <h3 className="text-base font-bold text-slate-900">
+                OpenAI BYOK (Bring Your Own Key) 설정
+              </h3>
+            </div>
+
+            <p className="text-xs text-slate-600 mb-4 leading-relaxed">
+              Vercel 공개 배포 환경 등 온프레미스 GPU 서버에 직접 접속할 수 없는 경우,
+              사용자의 OpenAI API 키를 입력하여 클라우드 LLM(gpt-4o-mini)으로 추론할 수 있습니다.
+            </p>
+
+            <div className="p-3 bg-amber-50 rounded-lg border border-amber-200 text-xs text-amber-900 mb-4 flex items-start gap-2">
+              <Shield className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
+              <span>
+                <strong>보안 보장:</strong> 입력하신 API 키는 브라우저의 <code>localStorage</code>에만 보관되며,
+                서버 데이터베이스나 로그에 절대 저장되지 않고 요청 헤더로만 전달됩니다.
+              </span>
+            </div>
+
+            <div className="space-y-2 mb-6">
+              <label className="text-xs font-semibold text-slate-700">
+                OpenAI API Key (`sk-...`)
+              </label>
+              <input
+                type="password"
+                value={byokKey}
+                onChange={e => setByokKey(e.target.value)}
+                placeholder="sk-proj-..."
+                className="w-full p-2.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 focus:border-purple-500 font-mono"
+              />
+            </div>
+
+            <div className="flex items-center justify-end gap-2">
+              {byokKey && (
+                <button
+                  type="button"
+                  onClick={() => handleSaveByok('')}
+                  className="px-3 py-2 text-xs text-rose-600 hover:bg-rose-50 rounded-lg transition"
+                >
+                  키 삭제 (온프레미스 모드로 복귀)
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setIsByokModalOpen(false)}
+                className="px-4 py-2 text-xs text-slate-600 hover:bg-slate-100 rounded-lg transition"
+              >
+                닫기
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSaveByok(byokKey)}
+                className="px-4 py-2 text-xs font-semibold bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition shadow"
+              >
+                저장 및 적용
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
