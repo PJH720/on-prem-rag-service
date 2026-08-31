@@ -36,3 +36,14 @@ lerna-debug.log*
 *.tsbuildinfo
 bin/
 plans/
+
+# AI Agent Instructions & Context
+claude.md
+CLAUDE.md
+agents.md
+AGENTS.md
+**/AGENTS.md
+**/agents.md
+**/CLAUDE.md
+**/claude.md
+.serena/
